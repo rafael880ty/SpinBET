@@ -152,10 +152,12 @@ const CONFIG = {
 
         // Adiciona listeners de eventos específicos da seção, se necessário
         if (sectionName === "players") {
-          mainContent.querySelectorAll("button[data-user]").forEach((btn) => {
-            btn.onclick = () =>
-              showPlayerModal(btn.dataset.userId, btn.dataset.userName);
-          });
+          mainContent
+            .querySelectorAll("button[data-user-id]")
+            .forEach((btn) => {
+              btn.onclick = () =>
+                showPlayerModal(btn.dataset.userId, btn.dataset.userName);
+            });
         }
       };
 
@@ -342,8 +344,6 @@ const CONFIG = {
 
           user.banReason = reason;
           if (banTypeSelect.value === "permanent") {
-            user.isBanned = true;
-            delete user.banExpiresAt;
             helpers.showToast(`${username} foi banido permanentemente.`);
           } else {
             const days =
@@ -356,9 +356,6 @@ const CONFIG = {
               (days * 86400 + hours * 3600 + minutes * 60) * 1000;
             if (durationMs <= 0)
               return helpers.showToast("A duração deve ser maior que zero.");
-
-            // Integração com Supabase
-            helpers.banirUsuario(user.id, durationMs / 1000);
 
             helpers.showToast(`${username} foi banido temporariamente.`);
           }
@@ -446,7 +443,7 @@ const CONFIG = {
       };
 
       // Carrega a seção inicial (Dashboard)
-      loadSection("players");
+      loadSection("dashboard");
     },
   },
 };
