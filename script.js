@@ -1,3 +1,61 @@
+import { supabase } from "./supabase.js";
+
+// ===================== USUÁRIOS (Supabase) ===================== //
+
+// Criar usuário (opcional se quiser criar manualmente no Supabase)
+export async function criarUsuario(nome, saldo = 0) {
+  const { data, error } = await supabase
+    .from("users")
+    .insert([{ nome, saldo }]);
+  if (error) console.error("Erro ao criar usuário:", error);
+  else console.log("Usuário criado:", data);
+}
+
+// Atualizar saldo de um usuário
+export async function definirSaldo(usuarioId, valor) {
+  const { data, error } = await supabase
+    .from("users")
+    .update({ saldo: valor })
+    .eq("id", usuarioId);
+  if (error) console.error("Erro ao atualizar saldo:", error);
+  else console.log("Saldo atualizado:", data);
+}
+
+// Banir usuário por tempo (tempoBan em segundos)
+export async function banirUsuario(usuarioId, tempoBan) {
+  const banFim = new Date(Date.now() + tempoBan * 1000); // calcula fim do ban
+  const { data, error } = await supabase
+    .from("users")
+    .update({ banido: true, ban_tempo: banFim.toISOString() })
+    .eq("id", usuarioId);
+  if (error) console.error("Erro ao banir usuário:", error);
+  else console.log(`Usuário banido até: ${banFim}`);
+}
+
+// ===================== MENSAGENS (Supabase) ===================== //
+
+// Enviar mensagem para usuário
+export async function enviarMensagem(usuarioId, titulo, corpo) {
+  const { data, error } = await supabase
+    .from("mensagens")
+    .insert([{ usuario_id: usuarioId, titulo, corpo, lida: false }]);
+  if (error) console.error("Erro ao enviar mensagem:", error);
+  else console.log("Mensagem enviada:", data);
+}
+
+// Buscar mensagens de um usuário
+export async function buscarMensagens(usuarioId) {
+  const { data, error } = await supabase
+    .from("mensagens")
+    .select("*")
+    .eq("usuario_id", usuarioId)
+    .order("criado_em", { ascending: false });
+  if (error) console.error("Erro ao buscar mensagens:", error);
+  else return data;
+}
+
+// ================================================================= //
+
 const GAMES = [
   {
     id: "double",
