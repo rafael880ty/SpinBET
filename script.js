@@ -3,12 +3,12 @@ import { supabase } from "./supabase.js";
 // ===================== USUÁRIOS (Supabase) ===================== //
 
 // Criar usuário (opcional se quiser criar manualmente no Supabase)
-export async function criarUsuario(nome, saldo = 0) {
+async function criarUsuarioSupabase(nome, passHash, saldo = 0) {
   const { data, error } = await supabase
     .from("users")
-    .insert([{ nome, saldo }]);
+    .insert([{ nome, pass_hash: passHash, saldo }]);
   if (error) console.error("Erro ao criar usuário:", error);
-  else console.log("Usuário criado:", data);
+  return { data, error };
 }
 
 // Atualizar saldo de um usuário
@@ -153,7 +153,7 @@ function formatCurrency(value) {
  APP STATE
  ------------------------------ */
 let state = {
-  users: storage.get("mc_users", {}), // username => {email, passHash, balance, history:[], joined, stats}
+  users: {}, // Este objeto será preenchido com os dados do usuário logado
   currentUser: storage.get("mc_currentUser", null), // username
   settings: storage.get("mc_settings", { sound: true, theme: "dark" }),
   missions: storage.get("mc_missions", {
@@ -246,31 +246,57 @@ function checkAndShowAdminMessage() {
  AUTH / ACCOUNT MANAGEMENT
  ------------------------------ */
 function saveState() {
-  storage.set("mc_users", state.users);
+  // Agora salvamos apenas o usuário logado e as configurações/missões
   storage.set("mc_currentUser", state.currentUser);
   storage.set("mc_settings", state.settings);
   storage.set("mc_missions", state.missions);
+  // O objeto 'users' não é mais salvo em localStorage, pois vem do DB
 }
-function createUser(username, email, pass) {
-  if (state.users[username]) return { ok: false, msg: "Usuário já existe" };
-  state.users[username] = {
-    email,
-    passHash: hash(pass),
-    balance: CONFIG.users.defaultCredits,
-    history: [],
-    joined: new Date().toISOString(),
-    inbox: [], // Caixa de entrada do usuário
-    stats: { wins: 0, plays: 0, streak: 0 },
-    profilePic:
-      "https://i.pinimg.com/236x/21/9e/ae/219eaea67aafa864db091919ce3f5d82.jpg",
-  };
+async function createUser(username, email, pass) {
+  // 1. Verifica se o usuário já existe no Supabase
+  const { data: existingUser, error: fetchError } = await supabase
+    .from("users")
+    .select("id")
+    .eq("nome", username)
+    .single();
+
+  if (existingUser) {
+    return { ok: false, msg: "Usuário já existe" };
+  }
+
+  // 2. Cria o usuário no Supabase
+  const passHash = hash(pass);
+  const { data: newUser, error: insertError } = await criarUsuarioSupabase(
+    username,
+    passHash,
+    CONFIG.users.defaultCredits
+  );
+
+  if (insertError) {
+    return { ok: false, msg: "Erro ao criar conta. Tente novamente." };
+  }
+
+  // 3. Loga o novo usuário
   state.currentUser = username;
+  state.users[username] = {
+    ...newUser[0], // Adiciona os dados do Supabase ao estado local
+    email, // Email não está no DB, mantemos localmente se necessário
+    history: [], // Inicializa localmente
+    stats: { wins: 0, plays: 0, streak: 0 }, // Inicializa localmente
+  };
   saveState();
   return { ok: true };
 }
-function loginUser(username, pass) {
-  const u = state.users[username];
-  if (!u) return { ok: false, msg: "Usuário não encontrado" };
+async function loginUser(username, pass) {
+  // Busca o usuário no Supabase
+  const { data: u, error } = await supabase
+    .from("users")
+    .select("*")
+    .eq("nome", username)
+    .single();
+
+  if (error || !u) return { ok: false, msg: "Usuário não encontrado" };
+
   if (u.isBanned) {
     if (u.isDeleted) {
       return {
@@ -298,8 +324,12 @@ function loginUser(username, pass) {
       return { ok: false, msg: banMsg };
     }
   }
-  if (u.passHash !== hash(pass)) return { ok: false, msg: "Senha inválida" };
+  // Compara o hash da senha
+  if (u.pass_hash !== hash(pass)) return { ok: false, msg: "Senha inválida" };
+
+  // Login bem-sucedido
   state.currentUser = username;
+  state.users[username] = { ...u, history: [], stats: { wins: 0, plays: 0 } }; // Armazena dados do usuário no estado
   saveState();
   return { ok: true };
 }
@@ -351,15 +381,16 @@ function renderAuth() {
         showToast("Preencha usuário e senha");
         return;
       }
-      const r = loginUser(u, p);
-      if (!r.ok) showToast(r.msg);
-      else {
-        showToast("Bem-vindo, " + u);
-        renderAuth();
-        renderBalance();
-        renderRanking();
-        checkAndShowAdminMessage(); // CORREÇÃO: Checa por mensagem após o login
-      }
+      loginUser(u, p).then((r) => {
+        if (!r.ok) showToast(r.msg);
+        else {
+          showToast("Bem-vindo, " + u);
+          renderAuth();
+          renderBalance();
+          renderRanking();
+          checkAndShowAdminMessage(); // CORREÇÃO: Checa por mensagem após o login
+        }
+      });
     };
     document.getElementById("btnSignup").onclick = () => {
       const u = document.getElementById("authUser").value.trim();
@@ -377,15 +408,16 @@ function renderAuth() {
         showToast("Senha muito curta (>=4)");
         return;
       }
-      const r = createUser(u, e, p);
-      if (!r.ok) showToast(r.msg);
-      else {
-        showToast("Conta criada: " + u);
-        renderAuth();
-        renderBalance();
-        renderRanking();
-        checkAndShowAdminMessage(); // CORREÇÃO: Checa por mensagem após o cadastro
-      }
+      createUser(u, e, p).then((r) => {
+        if (!r.ok) showToast(r.msg);
+        else {
+          showToast("Conta criada: " + u);
+          renderAuth();
+          renderBalance();
+          renderRanking();
+          checkAndShowAdminMessage(); // CORREÇÃO: Checa por mensagem após o cadastro
+        }
+      });
     };
   } else {
     const user = state.users[state.currentUser];
@@ -399,7 +431,9 @@ function renderAuth() {
         ✉️
         <span id="inboxBadge" class="badge" style="display: none;"></span>
       </button>
-      <div style="text-align:right"><strong>${state.currentUser}</strong><div class="small-muted">${user.email}</div></div>
+      <div style="text-align:right"><strong>${
+        state.currentUser
+      }</strong><div class="small-muted">${user.email || ""}</div></div>
       <img src="${profilePicUrl}" alt="Foto de Perfil" />
     `;
     box.appendChild(form);
@@ -2281,6 +2315,8 @@ el("adminPanelBtn").onclick = () => {
     formatCurrency,
     saveState,
     renderBalance,
+    definirSaldo, // Passando a função do Supabase
+    banirUsuario, // Passando a função do Supabase
   });
 };
 
@@ -2331,7 +2367,9 @@ function init() {
   el("gameArea").style.display = "none";
   // logout btn in sidebar
   // show default dashboard
-  show("dashboard");
+  if (el("nav-dashboard")) {
+    show("dashboard");
+  }
   // nav - show/hide
   // mount quick events
   el("btnAction").onclick = () =>
