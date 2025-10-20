@@ -39,10 +39,11 @@ const CONFIG = {
   admin: {
     // Função para exibir o painel de administrador
     showPanel: async (state, helpers) => {
+      // Adicionado 'helpers.pushNotification'
       // helpers: { showToast, formatCurrency, saveState, renderBalance }
       const pass = prompt("Digite a senha de administrador:");
       if (pass === null) return; // Cancela se o usuário clicar em "Cancelar"
-      a;
+
       if (pass !== CONFIG.site.adminPassword) {
         helpers.showToast("Senha incorreta.");
         return;
@@ -259,7 +260,6 @@ const CONFIG = {
           );
           modal.remove();
           loadSection("players");
-          helpers.renderBalance();
         };
 
         document.getElementById("banBtn").onclick = () => {
@@ -277,14 +277,8 @@ const CONFIG = {
           if (!message) {
             return helpers.showToast("A mensagem não pode estar vazia.");
           }
-          // Adiciona a mensagem à caixa de entrada do usuário
-          helpers.pushNotification(
-            username,
-            "admin",
-            "Mensagem do Administrador",
-            message
-          );
-          helpers.saveState();
+          // Integração com Supabase
+          helpers.enviarMensagem(user.id, "Mensagem do Administrador", message);
           helpers.showToast(`Mensagem enviada para ${username}.`);
           modal.remove();
         };
@@ -363,21 +357,19 @@ const CONFIG = {
             if (durationMs <= 0)
               return helpers.showToast("A duração deve ser maior que zero.");
 
-            user.isBanned = true;
-            user.banExpiresAt = Date.now() + durationMs;
+            // Integração com Supabase
+            helpers.banirUsuario(user.id, durationMs / 1000);
+
             helpers.showToast(`${username} foi banido temporariamente.`);
           }
-          helpers.saveState();
           banModal.remove();
           loadSection("players");
         };
 
         if (user.isBanned) {
           document.getElementById("unbanBtn").onclick = () => {
-            delete user.isBanned;
-            delete user.banExpiresAt;
-            delete user.banReason;
-            helpers.saveState();
+            // Para desbanir, definimos o tempo de ban como 0
+            helpers.banirUsuario(user.id, 0);
             helpers.showToast(`${username} foi desbanido.`);
             banModal.remove();
             loadSection("players");
@@ -454,7 +446,7 @@ const CONFIG = {
       };
 
       // Carrega a seção inicial (Dashboard)
-      loadSection("dashboard");
+      loadSection("players");
     },
   },
 };
