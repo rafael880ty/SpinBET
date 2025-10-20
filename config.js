@@ -284,9 +284,9 @@ const CONFIG = {
               "O motivo é obrigatório para alterar o saldo."
             );
 
-          const oldBalance = user.balance;
-          user.balance = amount;
-          helpers.saveState();
+          // Integração com Supabase
+          helpers.definirSaldo(user.id, amount);
+
           helpers.showToast(
             `Saldo de ${username} definido para R$ ${helpers.formatCurrency(
               amount
@@ -294,7 +294,7 @@ const CONFIG = {
           );
           // Log a ação (simulação)
           console.log(
-            `LOG: Saldo de ${username} alterado de ${oldBalance} para ${amount}. Motivo: ${reason}`
+            `LOG: Saldo de ${username} alterado para ${amount}. Motivo: ${reason}`
           );
           modal.remove();
           loadSection("players");
@@ -385,10 +385,9 @@ const CONFIG = {
           const reason = document.getElementById("banReason").value.trim();
           if (!reason) return helpers.showToast("O motivo é obrigatório.");
 
-          user.banReason = reason;
           if (banTypeSelect.value === "permanent") {
-            user.isBanned = true;
-            delete user.banExpiresAt;
+            // Banimento permanente (tempo muito longo)
+            helpers.banirUsuario(user.id, 3153600000); // 100 anos em segundos
             helpers.showToast(`${username} foi banido permanentemente.`);
           } else {
             const days =
@@ -402,21 +401,19 @@ const CONFIG = {
             if (durationMs <= 0)
               return helpers.showToast("A duração deve ser maior que zero.");
 
-            user.isBanned = true;
-            user.banExpiresAt = Date.now() + durationMs;
+            // Integração com Supabase
+            helpers.banirUsuario(user.id, durationMs / 1000);
+
             helpers.showToast(`${username} foi banido temporariamente.`);
           }
-          helpers.saveState();
           banModal.remove();
           loadSection("players");
         };
 
         if (user.isBanned) {
           document.getElementById("unbanBtn").onclick = () => {
-            delete user.isBanned;
-            delete user.banExpiresAt;
-            delete user.banReason;
-            helpers.saveState();
+            // Para desbanir, definimos o tempo de ban como 0
+            helpers.banirUsuario(user.id, 0);
             helpers.showToast(`${username} foi desbanido.`);
             banModal.remove();
             loadSection("players");
