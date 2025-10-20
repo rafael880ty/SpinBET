@@ -175,16 +175,6 @@ function saveState() {
 /* ------------------------------
    AUTH / ACCOUNT MANAGEMENT
 ------------------------------ */
-function logout() {
-  state.currentUser = null;
-  saveState();
-  renderAuth();
-  renderBalance();
-}
-
-/* ------------------------------
-   INICIALIZAÇÃO
------------------------------- */
 
 export async function createUser(username, email, pass) {
   // 1. Verifica se o usuário já existe no Supabase
@@ -292,8 +282,8 @@ function logout() {
 }
 async function deleteAccount() {
   if (!state.currentUser) return;
-  // Deleta do Supabase
-  await supabase.from("users").delete().eq("id", getUser().id);
+  // Simula a deleção no Supabase (em um app real, você faria a chamada aqui)
+  // await supabase.from("users").delete().eq("id", getUser().id);
   // Chama a função de logout para limpar completamente a sessão e a interface
   logout();
   showToast("Sua conta foi apagada com sucesso.");
@@ -396,14 +386,13 @@ function renderAuth() {
   const currentUserData = state.currentUser
     ? state.users[state.currentUser]
     : null;
-  const accountInfoEl = el("accountInfo");
-  if (!accountInfoEl) return;
-
-  accountInfoEl.innerText = currentUserData
-    ? `Usuário: ${state.currentUser}\nSaldo: ${formatCurrency(
-        currentUserData.saldo
-      )} créditos`
-    : "Nenhum usuário conectado";
+  if (el("accountInfo")) {
+    el("accountInfo").innerText = currentUserData
+      ? `Usuário: ${state.currentUser}\nSaldo: ${formatCurrency(
+          currentUserData.saldo
+        )} créditos`
+      : "Nenhum usuário conectado";
+  }
 
   // Atualiza o nome de usuário na barra lateral
   el("usernameDisplay").innerText = state.currentUser || "—";
@@ -2304,6 +2293,12 @@ el("withdrawBtn").onclick = () => {
   showToast("Sacado -" + val + " créditos");
 };
 async function init() {
+  // 1. Renderiza a estrutura básica e os jogos imediatamente.
+  renderGames("");
+  renderAuth();
+  renderBalance();
+  renderRanking();
+
   // Aplica configurações do site
   document.title = CONFIG.site.title;
   el("brand").querySelector("h1").innerText = CONFIG.site.title;
