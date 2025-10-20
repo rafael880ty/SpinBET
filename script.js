@@ -451,19 +451,16 @@ function renderAuth() {
     renderInboxBadge();
   }
   // update accountInfo
-  el("accountInfo").innerText = state.currentUser
-    ? `Usuário: ${state.currentUser}\nSaldo: ${formatCurrency(
-        state.users[state.currentUser].balance
-      )} créditos`
-    : "Nenhum usuário conectado";
   const currentUserData = state.currentUser
     ? state.users[state.currentUser]
     : null;
-  el("accountInfo").innerText = currentUserData
-    ? `Usuário: ${state.currentUser}\nSaldo: ${formatCurrency(
-        currentUserData.balance
-      )} créditos`
-    : "Nenhum usuário conectado";
+  if (el("accountInfo")) {
+    el("accountInfo").innerText = currentUserData
+      ? `Usuário: ${state.currentUser}\nSaldo: ${formatCurrency(
+          currentUserData.saldo
+        )} créditos`
+      : "Nenhum usuário conectado";
+  }
 
   // Atualiza o nome de usuário na barra lateral
   el("usernameDisplay").innerText = state.currentUser || "—";
@@ -529,7 +526,8 @@ function showInbox() {
 }
 
 function renderBalance() {
-  const v = state.currentUser ? state.users[state.currentUser].balance : 0;
+  const user = getUser();
+  const v = user ? user.saldo : 0;
   if (el("balanceValue")) {
     el("balanceValue").innerText = formatCurrency(v);
   }
@@ -2362,7 +2360,7 @@ el("withdrawBtn").onclick = () => {
   renderBalance();
   showToast("Sacado -" + val + " créditos");
 };
-function init() {
+async function init() {
   renderAuth();
   renderBalance();
   renderGames("");
@@ -2414,9 +2412,33 @@ function init() {
     reader.readAsDataURL(file);
   });
 
-  // if there's a logged user, greet
-  if (state.currentUser)
+  // Se houver um usuário logado no localStorage, busca seus dados do Supabase antes de renderizar
+  if (state.currentUser && !state.users[state.currentUser]) {
+    const { data: u, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("nome", state.currentUser)
+      .single();
+
+    if (u && !error) {
+      state.users[state.currentUser] = {
+        ...u,
+        history: [],
+        stats: { wins: 0, plays: 0 },
+        profilePic:
+          u.profilePic ||
+          "https://i.pinimg.com/236x/21/9e/ae/219eaea67aafa864db091919ce3f5d82.jpg",
+      };
+      renderAuth();
+      renderBalance();
+      showToast("Bem-vindo de volta, " + state.currentUser, 2200);
+    } else {
+      // Se o usuário não for encontrado no DB, desloga
+      logout();
+    }
+  } else if (state.currentUser) {
     showToast("Bem-vindo de volta, " + state.currentUser, 2200);
+  }
 
   checkAndShowAdminMessage(); // CORREÇÃO: Checa por mensagem no carregamento inicial
 }
