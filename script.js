@@ -386,6 +386,7 @@ function renderAuth() {
           showToast("Bem-vindo, " + u);
           renderAuth();
           renderBalance();
+          renderGames(""); // CORREÇÃO: Renderiza os jogos novamente após o login.
           renderRanking();
           checkAndShowAdminMessage(); // CORREÇÃO: Checa por mensagem após o login
         }
@@ -413,6 +414,7 @@ function renderAuth() {
           showToast("Conta criada: " + u);
           renderAuth();
           renderBalance();
+          renderGames(""); // CORREÇÃO: Renderiza os jogos novamente após o cadastro.
           renderRanking();
           checkAndShowAdminMessage(); // CORREÇÃO: Checa por mensagem após o cadastro
         }
@@ -420,7 +422,7 @@ function renderAuth() {
     };
   } else {
     const user = state.users[state.currentUser];
-    form = document.createElement("div");
+    const form = document.createElement("div");
     const profilePicUrl =
       user.profilePic ||
       "https://i.pinimg.com/236x/21/9e/ae/219eaea67aafa864db091919ce3f5d82.jpg";
@@ -432,7 +434,9 @@ function renderAuth() {
       </button>
       <div style="text-align:right"><strong>${
         state.currentUser
-      }</strong><div class="small-muted">${user.email || ""}</div></div>
+      }</strong><div class="small-muted">${
+      user.email || "Sem email"
+    }</div></div>
       <img src="${profilePicUrl}" alt="Foto de Perfil" />
     `;
     box.appendChild(form);
@@ -440,19 +444,16 @@ function renderAuth() {
     renderInboxBadge();
   }
   // update accountInfo
-  el("accountInfo").innerText = state.currentUser
-    ? `Usuário: ${state.currentUser}\nSaldo: ${formatCurrency(
-        state.users[state.currentUser].balance
-      )} créditos`
-    : "Nenhum usuário conectado";
   const currentUserData = state.currentUser
     ? state.users[state.currentUser]
     : null;
-  el("accountInfo").innerText = currentUserData
-    ? `Usuário: ${state.currentUser}\nSaldo: ${formatCurrency(
-        currentUserData.balance
-      )} créditos`
-    : "Nenhum usuário conectado";
+  if (el("accountInfo")) {
+    el("accountInfo").innerText = currentUserData
+      ? `Usuário: ${state.currentUser}\nSaldo: ${formatCurrency(
+          currentUserData.saldo
+        )} créditos`
+      : "Nenhum usuário conectado";
+  }
 
   // Atualiza o nome de usuário na barra lateral
   el("usernameDisplay").innerText = state.currentUser || "—";
@@ -518,9 +519,11 @@ function showInbox() {
 }
 
 function renderBalance() {
-  const v = state.currentUser ? state.users[state.currentUser].balance : 0;
-  if (el("balanceValue")) {
-    el("balanceValue").innerText = formatCurrency(v);
+  const user = getUser();
+  const balanceValueEl = el("balanceValue");
+  if (balanceValueEl) {
+    const v = user ? user.saldo : 0;
+    balanceValueEl.innerText = formatCurrency(v);
   }
 }
 
