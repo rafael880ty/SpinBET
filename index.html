@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MiniCassino — Créditos Simulados</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body data-theme="dark">
+    <div class="app">
+      <!-- Sidebar (Menu Lateral) -->
+      <aside class="sidebar card">
+        <div class="brand">
+          <div class="logo">🎲</div>
+          <h1>MiniCassino</h1>
+        </div>
+
+        <div class="balance card">
+          <div class="small">Seu Saldo</div>
+          <div class="value">R$ <span id="balanceValue">0</span></div>
+        </div>
+
+        <nav class="nav">
+          <button id="nav-dashboard" class="active">🏠 &nbsp; Início</button>
+          <button id="nav-history">📜 &nbsp; Histórico</button>
+          <button id="nav-ranking">🏆 &nbsp; Ranking</button>
+          <button id="nav-bonuses">🎁 &nbsp; Bônus</button>
+          <button id="nav-settings">⚙️ &nbsp; Ajustes</button>
+          <button id="nav-support">💬 &nbsp; Suporte</button>
+          <button id="nav-logout">🚪 &nbsp; Sair</button>
+        </nav>
+
+        <div class="user-info">
+          <div class="small">Usuário</div>
+          <strong id="usernameDisplay">—</strong>
+        </div>
+      </aside>
+
+      <!-- Conteúdo Principal -->
+      <main class="main-content">
+        <header class="header">
+          <div class="search">
+            <input
+              type="text"
+              id="searchInput"
+              placeholder="Buscar jogo ou categoria..."
+            />
+            <span class="small">Filtro: <b id="filterLabel">Todos</b></span>
+          </div>
+          <div id="authBox">
+            <!-- Formulário de login/cadastro será inserido aqui -->
+          </div>
+        </header>
+
+        <!-- Seção do Dashboard (padrão) -->
+        <section id="section-dashboard">
+          <div class="wallet-actions card">
+            <div>
+              <input
+                type="number"
+                id="depositValue"
+                placeholder="Valor para depositar"
+              />
+              <button id="depositBtn" class="play-btn">Depositar</button>
+            </div>
+            <div>
+              <input
+                type="number"
+                id="withdrawValue"
+                placeholder="Valor para sacar"
+              />
+              <button id="withdrawBtn" class="play-btn">Sacar</button>
+            </div>
+          </div>
+
+          <div id="gameArea" class="game-area card" style="display: none">
+            <div class="game-top">
+              <div>
+                <h2 id="gameTitle"></h2>
+                <div id="gameSubtitle" class="small-muted"></div>
+              </div>
+              <div class="bet-controls" style="align-items: center">
+                <!-- Input original, agora oculto, para armazenar o valor da aposta -->
+                <input
+                  type="number"
+                  id="betInput"
+                  value="10"
+                  style="display: none"
+                />
+                <!-- Novos controles de aposta globais -->
+                <div
+                  id="globalBetControls"
+                  class="main-controls"
+                  style="display: none"
+                >
+                  <button id="globalBetDown" class="bet-adj">-</button>
+                  <div class="bet-display">
+                    <span class="small-muted">Aposta</span>
+                    <b id="globalBetDisplay">0.05</b>
+                  </div>
+                  <button id="globalBetUp" class="bet-adj">+</button>
+                </div>
+                <button id="btnAction" class="play-btn">Jogar</button>
+              </div>
+            </div>
+            <div id="gameCanvas" class="game-canvas"></div>
+            <div id="gameInfo" class="small-muted"></div>
+          </div>
+
+          <div class="games-container">
+            <div class="games-header">
+              <h3>Todos os Jogos</h3>
+              <div class="mini-history-box">
+                <h4>Últimas Jogadas</h4>
+                <div id="miniHistory" class="list"></div>
+              </div>
+            </div>
+            <div id="gamesGrid" class="games card">
+              <!-- Cards dos jogos serão inseridos aqui -->
+            </div>
+          </div>
+        </section>
+
+        <!-- Outras Seções (Histórico, Ranking, etc.) -->
+        <section id="section-history" class="card" style="display: none">
+          <h2>Histórico de Jogadas</h2>
+          <div id="historyList" class="list"></div>
+        </section>
+
+        <section id="section-ranking" class="card" style="display: none">
+          <h2>Ranking de Jogadores</h2>
+          <div id="rankingList" class="list"></div>
+        </section>
+
+        <section id="section-bonuses" class="card" style="display: none">
+          <h2>Bônus e Missões</h2>
+          <div class="bonus-grid">
+            <div class="bonus-item">
+              <h3>Bônus Diário</h3>
+              <p>Ganhe 100 créditos a cada 24 horas.</p>
+              <button id="claimDaily" class="play-btn">Reclamar</button>
+            </div>
+            <div class="bonus-item">
+              <h3>Primeira Aposta</h3>
+              <p>Ganhe 50 créditos de bônus.</p>
+              <button id="claimFirstBet" class="play-btn">Reclamar</button>
+            </div>
+            <div class="bonus-item">
+              <h3>Missão Plinko</h3>
+              <p>Jogue Plinko 5 vezes para ganhar 50 créditos.</p>
+              <button id="claimMission" class="play-btn">Reclamar</button>
+            </div>
+          </div>
+        </section>
+
+        <section id="section-settings" class="card" style="display: none">
+          <h2>Ajustes da Conta</h2>
+          <div id="accountInfo"></div>
+          <div class="settings-grid">
+            <label for="profilePicInput" class="settings-btn">
+              Mudar Foto de Perfil
+              <input
+                type="file"
+                id="profilePicInput"
+                accept="image/png, image/jpeg"
+                style="display: none"
+              />
+            </label>
+            <button id="soundToggle">Alternar Som</button>
+            <button id="themeDark">Tema Escuro</button>
+            <button id="themeLight">Tema Claro</button>
+            <button id="resetBalance">Resetar Saldo</button>
+            <button id="adminPanelBtn">Admin</button>
+            <button id="deleteAccount" class="danger">Apagar Conta</button>
+          </div>
+        </section>
+
+        <section id="section-support" class="card" style="display: none">
+          <h2>Suporte</h2>
+          <p>
+            Este é um projeto de simulação. Todos os créditos são fictícios.
+          </p>
+          <p>Para qualquer dúvida, entre em contato com o desenvolvedor.</p>
+        </section>
+      </main>
+    </div>
+
+    <!-- Container para notificações (toast) -->
+    <div id="toastContainer"></div>
+
+    <script src="config.js"></script>
+    <script src="script.js"></script>
+  </body>
+</html>
