@@ -3,7 +3,7 @@ import { supabase } from "./supabase.js";
 // ===================== USUÁRIOS (Supabase) ===================== //
 
 // Criar usuário (opcional se quiser criar manualmente no Supabase)
-async function criarUsuarioSupabase(nome, passHash, saldo = 0) {
+export async function criarUsuarioSupabase(nome, passHash, saldo = 0) {
   const { data, error } = await supabase
     .from("users")
     .insert([{ nome, saldo, pass_hash: passHash }]); // Garante que a coluna pass_hash seja enviada
@@ -38,9 +38,9 @@ export async function banirUsuario(usuarioId, tempoBan) {
 export async function enviarMensagem(usuarioId, titulo, corpo) {
   const { data, error } = await supabase
     .from("mensagens")
-    .insert([{ usuario_id: usuarioId, titulo, corpo, lida: false }]);
+    .insert([{ usuario_id: usuarioId, titulo, corpo }]);
   if (error) console.error("Erro ao enviar mensagem:", error);
-  else console.log("Mensagem enviada:", data);
+  return data || [];
 }
 
 // Buscar mensagens de um usuário
@@ -48,10 +48,9 @@ export async function buscarMensagens(usuarioId) {
   const { data, error } = await supabase
     .from("mensagens")
     .select("*")
-    .eq("usuario_id", usuarioId)
-    .order("criado_em", { ascending: false });
+    .eq("usuario_id", usuarioId);
   if (error) console.error("Erro ao buscar mensagens:", error);
-  else return data;
+  return data || [];
 }
 
 // ================================================================= //
@@ -252,7 +251,7 @@ function saveState() {
   storage.set("mc_missions", state.missions);
   // O objeto 'users' não é mais salvo em localStorage, pois vem do DB
 }
-async function createUser(username, email, pass) {
+export async function createUser(username, email, pass) {
   // 1. Verifica se o usuário já existe no Supabase
   const { data: existingUser, error: fetchError } = await supabase
     .from("users")
@@ -269,7 +268,7 @@ async function createUser(username, email, pass) {
   const { data: newUser, error: insertError } = await criarUsuarioSupabase(
     username,
     passHash,
-    CONFIG.users.defaultCredits
+    CONFIG.users.defaultCredits || 0
   );
 
   if (insertError) {
@@ -287,7 +286,7 @@ async function createUser(username, email, pass) {
   saveState();
   return { ok: true };
 }
-async function loginUser(username, pass) {
+export async function loginUser(username, pass) {
   // Busca o usuário no Supabase
   const { data: u, error } = await supabase
     .from("users")
