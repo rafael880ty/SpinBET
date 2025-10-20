@@ -281,6 +281,8 @@ export async function createUser(username, email, pass) {
     ...newUser[0], // Adiciona os dados do Supabase ao estado local
     email, // Email não está no DB, mantemos localmente se necessário
     history: [], // Inicializa localmente
+    profilePic:
+      "https://i.pinimg.com/236x/21/9e/ae/219eaea67aafa864db091919ce3f5d82.jpg",
     stats: { wins: 0, plays: 0, streak: 0 }, // Inicializa localmente
   };
   saveState();
@@ -324,12 +326,18 @@ export async function loginUser(username, pass) {
     }
   }
   // Compara o hash da senha
-  if (u.pass_hash && u.pass_hash !== hash(pass))
-    return { ok: false, msg: "Senha inválida" };
+  if (u.pass_hash !== hash(pass)) return { ok: false, msg: "Senha inválida" };
 
   // Login bem-sucedido
   state.currentUser = username;
-  state.users[username] = { ...u, history: [], stats: { wins: 0, plays: 0 } }; // Armazena dados do usuário no estado
+  state.users[username] = {
+    ...u,
+    history: [],
+    stats: { wins: 0, plays: 0 },
+    profilePic:
+      u.profilePic ||
+      "https://i.pinimg.com/236x/21/9e/ae/219eaea67aafa864db091919ce3f5d82.jpg",
+  }; // Armazena dados do usuário no estado
   saveState();
   return { ok: true };
 }
@@ -423,7 +431,7 @@ function renderAuth() {
     };
   } else {
     const user = state.users[state.currentUser];
-    form = document.createElement("div");
+    const form = document.createElement("div"); // CORREÇÃO: A variável 'form' não estava declarada
     const profilePicUrl =
       user.profilePic ||
       "https://i.pinimg.com/236x/21/9e/ae/219eaea67aafa864db091919ce3f5d82.jpg";
@@ -443,16 +451,19 @@ function renderAuth() {
     renderInboxBadge();
   }
   // update accountInfo
+  el("accountInfo").innerText = state.currentUser
+    ? `Usuário: ${state.currentUser}\nSaldo: ${formatCurrency(
+        state.users[state.currentUser].balance
+      )} créditos`
+    : "Nenhum usuário conectado";
   const currentUserData = state.currentUser
     ? state.users[state.currentUser]
     : null;
-  if (el("accountInfo")) {
-    el("accountInfo").innerText = currentUserData
-      ? `Usuário: ${state.currentUser}\nSaldo: ${formatCurrency(
-          currentUserData.saldo
-        )} créditos`
-      : "Nenhum usuário conectado";
-  }
+  el("accountInfo").innerText = currentUserData
+    ? `Usuário: ${state.currentUser}\nSaldo: ${formatCurrency(
+        currentUserData.balance
+      )} créditos`
+    : "Nenhum usuário conectado";
 
   // Atualiza o nome de usuário na barra lateral
   el("usernameDisplay").innerText = state.currentUser || "—";
@@ -518,8 +529,7 @@ function showInbox() {
 }
 
 function renderBalance() {
-  const user = getUser();
-  const v = user ? user.saldo : 0;
+  const v = state.currentUser ? state.users[state.currentUser].balance : 0;
   if (el("balanceValue")) {
     el("balanceValue").innerText = formatCurrency(v);
   }
@@ -606,9 +616,8 @@ function renderRanking() {
   arr.forEach((r, idx) => {
     const div = document.createElement("div");
     div.className = "list-item";
-    div.innerHTML = `<div>#${idx + 1} ${r.user}</div><div>R$ ${formatCurrency(
-      r.balance
-    )}</div>`;
+    div.innerHTML = `<div>#${idx + 1} ${r.user}</div>
+    <div>R$ ${formatCurrency(r.balance)}</div>`;
     box.appendChild(div);
   });
 }
@@ -716,16 +725,13 @@ function openGame(gameId) {
 function getUser() {
   return state.currentUser ? state.users[state.currentUser] : null;
 }
-async function adjustBalance(delta) {
+function adjustBalance(delta) {
   const u = getUser();
   if (!u) return;
-  const newBalance = u.saldo + delta;
-  u.saldo = newBalance; // Atualiza o estado local imediatamente para feedback visual
+  u.balance += delta;
+  saveState();
   renderBalance();
-
-  // Atualiza o saldo no Supabase em segundo plano
-  await definirSaldo(u.id, newBalance);
-  console.log(`Saldo de ${u.nome} atualizado no DB para ${newBalance}`);
+  renderRanking();
 }
 function pushHistory(game, bet, result, info) {
   if (!state.currentUser) return;
@@ -736,7 +742,7 @@ function pushHistory(game, bet, result, info) {
     result,
     info,
     time: new Date().toISOString(),
-    balanceAfter: u.saldo,
+    balanceAfter: u.balance,
   };
   u.history = u.history || [];
   u.history.push(entry);
@@ -924,7 +930,7 @@ function setupDouble(gameId) {
     if (totalBet === 0) {
       return showToast("Faça uma aposta antes de girar.");
     }
-    if (totalBet > getUser().saldo) {
+    if (totalBet > getUser().balance) {
       return showToast("Saldo insuficiente para cobrir as apostas.");
     }
 
@@ -1078,7 +1084,7 @@ function setupDice() {
     if (bet < 1) return showToast("Aposta mínima 1");
 
     const u = getUser();
-    if (bet > u.saldo) return showToast("Saldo insuficiente");
+    if (bet > u.balance) return showToast("Saldo insuficiente");
 
     adjustBalance(-bet);
 
@@ -1120,7 +1126,7 @@ function setupDice() {
     if (isWin) {
       const multiplier = 99 / chance;
       const payout = Math.floor(bet * multiplier);
-      adjustBalance(payout); // Usa a função correta para ajustar o saldo
+      u.balance += payout;
       pushHistory(
         "Dice",
         bet,
@@ -1137,6 +1143,7 @@ function setupDice() {
       );
       showToast("Você perdeu!");
     }
+    saveState();
     renderBalance();
   };
 
@@ -1251,7 +1258,7 @@ function setupMines() {
     if (!ensureAuthOrWarn()) return;
     bet = Number(el("betInput").value) || 0;
     if (bet < 1) return showToast("Aposta mínima 1");
-    if (bet > getUser().saldo) return showToast("Saldo insuficiente");
+    if (bet > getUser().balance) return showToast("Saldo insuficiente");
 
     adjustBalance(-bet);
 
@@ -1286,7 +1293,7 @@ function setupMines() {
     el("btnAction").onclick = () => {
       if (gameOver || revealedCount === 0) return;
       const win = Math.floor(bet * multiplier);
-      adjustBalance(win);
+      getUser().balance += win;
       pushHistory(
         "Mines",
         bet,
@@ -1297,6 +1304,7 @@ function setupMines() {
       );
       showToast(`Você sacou ${win} créditos!`);
       revealBoard();
+      saveState();
       el("minesBombs").disabled = false; // Reabilita o input de bombas
       renderBalance();
       el("btnAction").innerText = "Jogar Novamente";
@@ -1452,7 +1460,7 @@ function setupPlinko() {
           const payout = Math.floor(ball.bet * multiplier.value);
           const isWin = multiplier.value >= 1;
 
-          adjustBalance(payout);
+          getUser().balance += payout;
 
           if (isWin) {
             pushHistory(
@@ -1468,6 +1476,7 @@ function setupPlinko() {
             showToast(`Perdeu ${lossAmount} créditos (x${multiplier.value})`);
           }
 
+          saveState();
           renderBalance();
         }
         balls.splice(ballIndex, 1); // Remove a bola
@@ -1485,7 +1494,7 @@ function setupPlinko() {
     if (!ensureAuthOrWarn()) return;
     const bet = Number(el("betInput").value) || 0;
     if (bet < 1) return showToast("Aposta mínima 1");
-    if (bet > getUser().saldo) return showToast("Saldo insuficiente");
+    if (bet > getUser().balance) return showToast("Saldo insuficiente");
 
     adjustBalance(-bet);
     balls.push({
@@ -1652,9 +1661,10 @@ function setupFruitSlice() {
     if (fruitSliceGame.running) {
       // Resgatar ganhos
       const payout = Math.floor(bet * (1 + score * 0.4));
-      adjustBalance(payout);
+      getUser().balance += payout;
       pushHistory("FruitSlice", bet, "WIN", `Score:${score} -> +${payout}`);
       showToast("Você ganhou " + payout + " créditos");
+      saveState();
       renderBalance();
       endGame();
       return;
@@ -1664,9 +1674,10 @@ function setupFruitSlice() {
     bet = Number(el("betInput").value) || 0;
     if (bet < 1) return showToast("Aposta mínima 1");
     const u = getUser();
-    if (bet > u.saldo) return showToast("Saldo insuficiente");
+    if (bet > u.balance) return showToast("Saldo insuficiente");
 
-    adjustBalance(-bet);
+    u.balance -= bet;
+    saveState();
     renderBalance();
 
     score = 0;
@@ -1724,7 +1735,7 @@ function setupSlot(gameId) {
     <div class="slot-controls">
         <div class="control-group">
             <span class="small-muted">Saldo</span>
-            <b id="slotBalance">${formatCurrency(getUser()?.saldo || 0)}</b>
+            <b id="slotBalance">${getUser()?.balance || 0}</b>
         </div>
         <div class="control-group main-controls">
             <button id="betDown" class="bet-adj">-</button>
@@ -2000,7 +2011,7 @@ function setupSlot(gameId) {
       }
 
       const u = getUser();
-      if (bet > u.saldo) {
+      if (bet > u.balance) {
         showToast("Saldo insuficiente");
         isAuto = false;
         el("slotAuto").classList.remove("active");
@@ -2014,7 +2025,7 @@ function setupSlot(gameId) {
         adjustBalance(-bet);
       }
 
-      el("slotBalance").innerText = formatCurrency(u.saldo);
+      el("slotBalance").innerText = u.balance;
       el("slotWin").innerText = 0;
       document
         .querySelectorAll(".symbol-container.win-highlight")
@@ -2087,7 +2098,7 @@ function setupSlot(gameId) {
 
         totalWin = Math.floor(totalWin);
         adjustBalance(totalWin);
-        el("slotBalance").innerText = formatCurrency(u.saldo);
+        el("slotBalance").innerText = u.balance;
         el("slotWin").innerText = totalWin;
         reels.forEach((r) => r.classList.add("game-over"));
 
@@ -2207,9 +2218,9 @@ el("claimDaily").onclick = () => {
     showToast("Bônus diário já resgatado hoje.");
     return;
   }
-  adjustBalance(CONFIG.rewards.dailyBonus);
+  u.balance += CONFIG.rewards.dailyBonus;
   storage.set(lastDailyKey, now);
-
+  saveState();
   pushNotification(
     state.currentUser,
     "bonus",
@@ -2227,8 +2238,9 @@ el("claimFirstBet").onclick = () => {
     showToast("Bônus de primeira aposta já resgatado.");
     return;
   }
-  adjustBalance(CONFIG.rewards.firstBetBonus);
+  u.balance += CONFIG.rewards.firstBetBonus;
   storage.set("mc_firstbet_" + state.currentUser, true);
+  saveState();
   pushNotification(
     state.currentUser,
     "bonus",
@@ -2248,8 +2260,9 @@ el("claimMission").onclick = () => {
   }
   const required = CONFIG.rewards.plinkoMission.playsRequired;
   if (m.plinkoPlays >= required) {
-    adjustBalance(CONFIG.rewards.plinkoMission.reward);
+    getUser().balance += CONFIG.rewards.plinkoMission.reward;
     m.completed = true;
+    saveState();
     pushNotification(
       state.currentUser,
       "bonus",
@@ -2290,8 +2303,8 @@ el("themeLight").onclick = () => {
 };
 el("resetBalance").onclick = () => {
   if (!ensureAuthOrWarn()) return;
-  const user = getUser();
-  definirSaldo(user.id, CONFIG.users.defaultCredits);
+  getUser().balance = CONFIG.users.defaultCredits;
+  saveState();
   renderBalance();
   showToast("Saldo resetado");
 };
@@ -2314,7 +2327,6 @@ el("adminPanelBtn").onclick = () => {
     renderBalance,
     definirSaldo, // Passando a função do Supabase
     banirUsuario, // Passando a função do Supabase
-    pushNotification, // Passando a função de notificação
   });
 };
 
@@ -2334,7 +2346,8 @@ el("depositBtn").onclick = () => {
   if (!ensureAuthOrWarn()) return;
   const val = Number(el("depositValue").value) || 0;
   if (val < 1) return showToast("Valor mínimo: 1");
-  adjustBalance(val);
+  getUser().balance += val;
+  saveState();
   renderBalance();
   showToast("Depositado +" + val + " créditos");
 };
@@ -2343,8 +2356,9 @@ el("withdrawBtn").onclick = () => {
   if (!ensureAuthOrWarn()) return;
   const val = Number(el("withdrawValue").value) || 0;
   if (val < 1) return showToast("Valor mínimo: 1");
-  if (val > getUser().saldo) return showToast("Saldo insuficiente");
-  adjustBalance(-val);
+  if (val > getUser().balance) return showToast("Saldo insuficiente");
+  getUser().balance -= val;
+  saveState();
   renderBalance();
   showToast("Sacado -" + val + " créditos");
 };
