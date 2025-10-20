@@ -151,106 +151,117 @@ function formatCurrency(value) {
 /* ------------------------------
  APP STATE
  ------------------------------ */
+/* ------------------------------
+   APP STATE
+------------------------------ */
 let state = {
-  users: {}, // Este objeto será preenchido com os dados do usuário logado
-  currentUser: storage.get("mc_currentUser", null), // username
+  users: storage.get("mc_users", {}),
+  currentUser: storage.get("mc_currentUser", null),
   settings: storage.get("mc_settings", { sound: true, theme: "dark" }),
-  missions: storage.get("mc_missions", {
-    plinkoPlays: 0,
-    completed: false,
-  }),
+  missions: storage.get("mc_missions", {}),
 };
 
-/* helper: simple hash (not secure) */
-function hash(s) {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h += (h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24);
-  }
-  return String(h >>> 0);
-}
-
-/* notifications */
-function showToast(text, timeout = 3500) {
-  const id = "t" + Date.now();
-  const box = document.createElement("div");
-  box.className = "toast";
-  box.id = id;
-  box.innerText = text;
-  document.getElementById("toastContainer").appendChild(box);
-  setTimeout(() => {
-    box.style.opacity = "0";
-    box.style.transform = "translateY(20px)";
-  }, timeout - 400);
-  setTimeout(() => {
-    box.remove();
-  }, timeout);
-}
-
-/* helper: show admin message popup */
-function showAdminPopup(title, message) {
-  const popup = document.createElement("div");
-  popup.className = "admin-modal-overlay";
-  popup.innerHTML = `
-    <div class="admin-modal-content">
-      <div class="admin-modal-header">
-        <h3>${title}</h3>
-        <button id="closeAdminPopupBtn" class="admin-modal-close">&times;</button>
-      </div>
-      <div class="admin-modal-body">
-        <p>${message}</p>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(popup);
-
-  popup.onclick = (e) => {
-    if (e.target === popup) popup.remove();
-  };
-  document.getElementById("closeAdminPopupBtn").onclick = () => popup.remove();
-}
-
-/* helper: Adiciona uma notificação à caixa de entrada do usuário */
-function pushNotification(userId, type, title, message) {
-  if (!state.users[userId]) return;
-  const user = state.users[userId];
-  user.inbox = user.inbox || [];
-  user.inbox.unshift({
-    id: "msg_" + Date.now(),
-    type: type, // 'admin', 'game', 'bonus'
-    title: title,
-    message: message,
-    timestamp: new Date().toISOString(),
-    read: false,
-  });
-  if (user.inbox.length > 100) user.inbox.pop(); // Limita o tamanho da caixa de entrada
-  saveState();
-  renderInboxBadge(); // Atualiza o indicador de notificação
-}
-
-/* helper: check for and display admin popup message */
-function checkAndShowAdminMessage() {
-  const u = getUser();
-  if (u && u.popupMessage) {
-    // Atraso para não sobrepor o toast de boas-vindas
-    setTimeout(() => {
-      showAdminPopup("Mensagem do Administrador", u.popupMessage);
-      delete u.popupMessage; // Limpa a mensagem para não mostrar novamente
-      saveState();
-    }, 500);
-  }
-}
-/* ------------------------------
- AUTH / ACCOUNT MANAGEMENT
- ------------------------------ */
 function saveState() {
-  // Agora salvamos apenas o usuário logado e as configurações/missões
+  storage.set("mc_users", state.users);
   storage.set("mc_currentUser", state.currentUser);
   storage.set("mc_settings", state.settings);
   storage.set("mc_missions", state.missions);
-  // O objeto 'users' não é mais salvo em localStorage, pois vem do DB
 }
+
+/* ------------------------------
+   AUTH / ACCOUNT MANAGEMENT
+------------------------------ */
+export async function createUser(username, email, pass) {
+  // Simula busca no Supabase
+  const { data: u, error } = await supabase
+    .from("users")
+    .select("*")
+    .eq("nome", username)
+    .single();
+
+  if (error) return { ok: false, msg: "Erro ao criar conta." };
+
+  state.currentUser = username;
+  state.users[username] = {
+    ...u,
+    history: [],
+    stats: { wins: 0, plays: 0 },
+    profilePic:
+      u.profilePic ||
+      "https://i.pinimg.com/236x/21/9e/ae/219eaea67aafa864db091919ce3f5d82.jpg",
+  };
+  saveState();
+  return { ok: true };
+}
+
+function logout() {
+  state.currentUser = null;
+  saveState();
+  el("gameArea").style.display = "none";
+  renderAuth();
+  renderBalance();
+}
+
+async function deleteAccount() {
+  if (!state.currentUser) return;
+
+  const username = state.currentUser;
+  const u = state.users[username];
+
+  if (!u) return;
+
+  // Remove no Supabase
+  await supabase.from("users").delete().eq("id", u.id);
+
+  // Limpa do localStorage e estado
+  delete state.users[username];
+  state.currentUser = null;
+  saveState();
+
+  showToast("Conta excluída com sucesso.", 3000);
+  renderAuth();
+  renderBalance();
+}
+
+/* ------------------------------
+   INICIALIZAÇÃO
+------------------------------ */
+async function init() {
+  document.title = CONFIG.site.title;
+  el("brand").querySelector("h1").innerText = CONFIG.site.title;
+  el("brand").querySelector(".logo").innerText = CONFIG.site.logo;
+
+  el("gameArea").style.display = "none";
+
+  // Se houver usuário logado, valida sessão
+  if (state.currentUser) {
+    const u = state.users[state.currentUser];
+    if (u) {
+      const { data: dbUser, error } = await supabase
+        .from("users")
+        .select("saldo, banido")
+        .eq("id", u.id)
+        .single();
+
+      if (error || !dbUser || dbUser.banido) {
+        showToast("Sua sessão expirou ou a conta foi desativada.", 4000);
+        logout();
+      } else {
+        state.users[state.currentUser].saldo = dbUser.saldo;
+        saveState();
+        showToast(`Bem-vindo de volta, ${state.currentUser}`, 2200);
+      }
+    }
+  }
+
+  renderAuth();
+  renderBalance();
+  renderGames("");
+  setupNav();
+  renderRanking();
+  checkAndShowAdminMessage();
+}
+
 export async function createUser(username, email, pass) {
   // 1. Verifica se o usuário já existe no Supabase
   const { data: existingUser, error: fetchError } = await supabase
@@ -330,6 +341,7 @@ export async function loginUser(username, pass) {
 
   // Login bem-sucedido
   state.currentUser = username;
+  // Armazena os dados essenciais do usuário no estado local
   state.users[username] = {
     ...u,
     history: [],
@@ -337,7 +349,7 @@ export async function loginUser(username, pass) {
     profilePic:
       u.profilePic ||
       "https://i.pinimg.com/236x/21/9e/ae/219eaea67aafa864db091919ce3f5d82.jpg",
-  }; // Armazena dados do usuário no estado
+  };
   saveState();
   return { ok: true };
 }
@@ -351,6 +363,9 @@ function logout() {
 }
 function deleteAccount() {
   if (!state.currentUser) return;
+  // Aqui você adicionaria a lógica para deletar o usuário do Supabase
+  // Ex: await supabase.from('users').delete().eq('id', getUser().id);
+  // Limpa o usuário do estado local antes de deslogar
   delete state.users[state.currentUser];
   // Chama a função de logout para limpar completamente a sessão e a interface
   logout();
@@ -2361,19 +2376,6 @@ el("withdrawBtn").onclick = () => {
   showToast("Sacado -" + val + " créditos");
 };
 async function init() {
-  renderAuth();
-  renderBalance();
-  renderGames("");
-  setupNav();
-  renderRanking();
-
-  // Aplica configurações do site
-  document.title = CONFIG.site.title;
-  el("brand").querySelector("h1").innerText = CONFIG.site.title;
-  el("brand").querySelector(".logo").innerText = CONFIG.site.logo;
-  // hide game area initially
-  el("gameArea").style.display = "none";
-  // logout btn in sidebar
   // show default dashboard
   if (el("nav-dashboard")) {
     show("dashboard");
@@ -2382,6 +2384,12 @@ async function init() {
   // mount quick events
   el("btnAction").onclick = () =>
     showToast("Selecione um jogo e pressione Jogar");
+
+  // Aplica configurações do site
+  document.title = CONFIG.site.title;
+  el("brand").querySelector("h1").innerText = CONFIG.site.title;
+  el("brand").querySelector(".logo").innerText = CONFIG.site.logo;
+  el("gameArea").style.display = "none"; // Esconde a área de jogo inicialmente
 
   // Lógica para mudar a foto de perfil (movido para init)
   el("profilePicInput").addEventListener("change", (event) => {
@@ -2412,33 +2420,35 @@ async function init() {
     reader.readAsDataURL(file);
   });
 
-  // Se houver um usuário logado no localStorage, busca seus dados do Supabase antes de renderizar
-  if (state.currentUser && !state.users[state.currentUser]) {
-    const { data: u, error } = await supabase
-      .from("users")
-      .select("*")
-      .eq("nome", state.currentUser)
-      .single();
-
-    if (u && !error) {
-      state.users[state.currentUser] = {
-        ...u,
-        history: [],
-        stats: { wins: 0, plays: 0 },
-        profilePic:
-          u.profilePic ||
-          "https://i.pinimg.com/236x/21/9e/ae/219eaea67aafa864db091919ce3f5d82.jpg",
-      };
-      renderAuth();
-      renderBalance();
-      showToast("Bem-vindo de volta, " + state.currentUser, 2200);
-    } else {
-      // Se o usuário não for encontrado no DB, desloga
-      logout();
+  // Se houver um usuário salvo no localStorage, tenta restaurar e validar a sessão
+  if (state.currentUser) {
+    const userFromStorage = state.users[state.currentUser];
+    // Se temos dados no storage, renderiza imediatamente para uma experiência rápida
+    if (userFromStorage) {
+      // Valida a sessão com o Supabase em segundo plano
+      const { data: dbUser, error } = await supabase
+        .from("users")
+        .select("saldo, banido")
+        .eq("id", userFromStorage.id)
+        .single();
+      if (error || !dbUser || dbUser.banido) {
+        showToast("Sua sessão expirou ou a conta foi desativada.", 4000);
+        logout();
+      } else {
+        // Atualiza o saldo local com o do DB para garantir consistência
+        state.users[state.currentUser].saldo = dbUser.saldo;
+        saveState();
+        showToast("Bem-vindo de volta, " + state.currentUser, 2200);
+      }
     }
-  } else if (state.currentUser) {
-    showToast("Bem-vindo de volta, " + state.currentUser, 2200);
   }
+
+  // Renderiza a interface principal com os dados já carregados
+  renderAuth();
+  renderBalance();
+  renderGames("");
+  setupNav();
+  renderRanking();
 
   checkAndShowAdminMessage(); // CORREÇÃO: Checa por mensagem no carregamento inicial
 }
