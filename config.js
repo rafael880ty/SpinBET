@@ -38,11 +38,11 @@ const CONFIG = {
   // Toda a lógica do painel de administrador está aqui.
   admin: {
     // Função para exibir o painel de administrador
-    showPanel: (state, helpers) => {
+    showPanel: async (state, helpers) => {
       // helpers: { showToast, formatCurrency, saveState, renderBalance }
       const pass = prompt("Digite a senha de administrador:");
       if (pass === null) return; // Cancela se o usuário clicar em "Cancelar"
-
+      a;
       if (pass !== CONFIG.site.adminPassword) {
         helpers.showToast("Senha incorreta.");
         return;
@@ -82,69 +82,25 @@ const CONFIG = {
       // 2. Funções para renderizar cada seção
       const sections = {
         dashboard: () => {
-          const totalUsers = Object.keys(state.users).length;
-          const totalBalance = Object.values(state.users).reduce(
-            (sum, user) => sum + user.balance,
-            0
-          );
-          const totalPlays = Object.values(state.users).reduce(
-            (sum, user) => sum + (user.stats.plays || 0),
-            0
-          );
-
-          // Calcula os jogos mais jogados
-          const gamePlays = {};
-          Object.values(state.users).forEach((user) => {
-            user.history.forEach((h) => {
-              gamePlays[h.game] = (gamePlays[h.game] || 0) + 1;
-            });
-          });
-          const popularGames = Object.entries(gamePlays)
-            .sort(([, a], [, b]) => b - a)
-            .slice(0, 5)
-            .map(
-              ([name, plays]) =>
-                `<li>${name} <span>(${plays} jogadas)</span></li>`
-            )
-            .join("");
-
           return `
             <div class="admin-header"><h1>Dashboard</h1></div>
-            <div class="admin-stats-grid">
-              <div class="admin-stat-card">
-                <h4>Total de Jogadores</h4>
-                <p>${totalUsers}</p>
-              </div>
-              <div class="admin-stat-card">
-                <h4>Saldo Total em Jogo</h4>
-                <p>R$ ${helpers.formatCurrency(totalBalance)}</p>
-              </div>
-              <div class="admin-stat-card">
-                <h4>Total de Jogadas</h4>
-                <p>${totalPlays}</p>
-              </div>
-            </div>
-            <div class="admin-card">
-              <h3>Jogos Mais Populares</h3>
-              <ul class="admin-list">${
-                popularGames || "<li>Nenhuma jogada registrada.</li>"
-              }</ul>
-            </div>
+            <div class="admin-card"><p>Seção de Dashboard em desenvolvimento.</p></div>
           `;
         },
-        players: () => {
-          const userRows = Object.keys(state.users)
+        players: (users) => {
+          const userRows = users
             .map((username) => {
-              const user = state.users[username];
               return `
               <tr>
-                <td>${username}</td>
-                <td>${helpers.formatCurrency(user.balance)}</td>
+                <td>${username.nome}</td>
+                <td>${helpers.formatCurrency(username.saldo)}</td>
                 <td><span class="admin-status ${
-                  user.isBanned ? "offline" : "online"
-                }">${user.isBanned ? "Banido" : "Ativo"}</span></td>
-                <td>${new Date(user.joined).toLocaleDateString()}</td>
-                <td><button class="admin-btn-small" data-user="${username}">Editar</button></td>
+                  username.banido ? "offline" : "online"
+                }">${username.banido ? "Banido" : "Ativo"}</span></td>
+                <td>${new Date(username.criado_em).toLocaleDateString()}</td>
+                <td><button class="admin-btn-small" data-user-id="${
+                  username.id
+                }" data-user-name="${username.nome}">Editar</button></td>
               </tr>
             `;
             })
@@ -181,25 +137,36 @@ const CONFIG = {
       const mainContent = document.getElementById("adminMainContent");
 
       // 3. Função para carregar o conteúdo de uma seção
-      const loadSection = (sectionName) => {
-        mainContent.innerHTML = sections[sectionName](); // CORREÇÃO: Usa a sintaxe correta para chamar a função da seção.
+      const loadSection = async (sectionName) => {
+        if (sectionName === "players") {
+          const { data: users, error } = await supabase.from("users").select();
+          if (error) {
+            mainContent.innerHTML = `<p>Erro ao carregar usuários.</p>`;
+            return;
+          }
+          mainContent.innerHTML = sections.players(users);
+        } else {
+          mainContent.innerHTML = sectionssectionName;
+        }
+
         // Adiciona listeners de eventos específicos da seção, se necessário
         if (sectionName === "players") {
           mainContent.querySelectorAll("button[data-user]").forEach((btn) => {
-            btn.onclick = () => showPlayerModal(btn.dataset.user);
+            btn.onclick = () =>
+              showPlayerModal(btn.dataset.userId, btn.dataset.userName);
           });
         }
       };
 
       // Função para mostrar o Modal de Edição de Jogador
-      const showPlayerModal = (username) => {
-        const user = state.users[username];
-        if (!user) return;
-
-        const winRate =
-          user.stats.plays > 0
-            ? ((user.stats.wins / user.stats.plays) * 100).toFixed(1)
-            : 0;
+      const showPlayerModal = async (userId, username) => {
+        const { data: user, error } = await supabase
+          .from("users")
+          .select()
+          .eq("id", userId)
+          .single();
+        if (error || !user)
+          return helpers.showToast("Erro ao buscar dados do jogador.");
 
         const modal = document.createElement("div");
         modal.className = "admin-modal-overlay";
@@ -210,9 +177,9 @@ const CONFIG = {
               <div>
                 <h3>${username}</h3>
                 <p class="small-muted">ID: ${
-                  user.id || "N/A"
+                  user.id
                 } • Membro desde: ${new Date(
-          user.joined
+          user.criado_em
         ).toLocaleDateString()}</p>
               </div>
               <button id="closeModalBtn" class="admin-modal-close">&times;</button>
@@ -226,9 +193,7 @@ const CONFIG = {
                 </div>
                  <div class="admin-form-group">
                   <label for="adminNotes">Observações Internas (só para admins)</label>
-                  <textarea id="adminNotes" placeholder="Adicione notas sobre o jogador...">${
-                    user.adminNotes || ""
-                  }</textarea>
+                  <textarea id="adminNotes" placeholder="Adicione notas sobre o jogador...">${""}</textarea>
                 </div>
               </div>
               <div class="admin-card">
@@ -243,7 +208,7 @@ const CONFIG = {
                 <h4>Ações da Conta</h4>
                 <div class="admin-form-inline">
                   <button id="banBtn" class="admin-btn-secondary">${
-                    user.isBanned ? "Gerenciar Banimento" : "Banir / Suspender"
+                    user.banido ? "Gerenciar Banimento" : "Banir / Suspender"
                   }</button>
                   <button id="deleteBtn" class="admin-btn-danger">Excluir Usuário</button>
                 </div>
@@ -292,10 +257,6 @@ const CONFIG = {
               amount
             )}.`
           );
-          // Log a ação (simulação)
-          console.log(
-            `LOG: Saldo de ${username} alterado para ${amount}. Motivo: ${reason}`
-          );
           modal.remove();
           loadSection("players");
           helpers.renderBalance();
@@ -331,7 +292,6 @@ const CONFIG = {
 
       // Função para o Modal de Banimento
       const showBanModal = (username) => {
-        const user = state.users[username];
         const banModal = document.createElement("div");
         banModal.className = "admin-modal-overlay";
         banModal.innerHTML = `
@@ -357,9 +317,10 @@ const CONFIG = {
               </div>
               <div class="admin-modal-footer">
                     ${
-                      user.isBanned
-                        ? '<button id="unbanBtn" class="admin-btn-secondary">Desbanir</button>'
-                        : ""
+                      ""
+                      // user.isBanned
+                      //   ? '<button id="unbanBtn" class="admin-btn-secondary">Desbanir</button>'
+                      //   : ""
                     }
                     <button id="confirmBanBtn" class="admin-btn-primary">Aplicar Banimento</button>
                 </div>
@@ -385,9 +346,10 @@ const CONFIG = {
           const reason = document.getElementById("banReason").value.trim();
           if (!reason) return helpers.showToast("O motivo é obrigatório.");
 
+          user.banReason = reason;
           if (banTypeSelect.value === "permanent") {
-            // Banimento permanente (tempo muito longo)
-            helpers.banirUsuario(user.id, 3153600000); // 100 anos em segundos
+            user.isBanned = true;
+            delete user.banExpiresAt;
             helpers.showToast(`${username} foi banido permanentemente.`);
           } else {
             const days =
@@ -401,19 +363,21 @@ const CONFIG = {
             if (durationMs <= 0)
               return helpers.showToast("A duração deve ser maior que zero.");
 
-            // Integração com Supabase
-            helpers.banirUsuario(user.id, durationMs / 1000);
-
+            user.isBanned = true;
+            user.banExpiresAt = Date.now() + durationMs;
             helpers.showToast(`${username} foi banido temporariamente.`);
           }
+          helpers.saveState();
           banModal.remove();
           loadSection("players");
         };
 
         if (user.isBanned) {
           document.getElementById("unbanBtn").onclick = () => {
-            // Para desbanir, definimos o tempo de ban como 0
-            helpers.banirUsuario(user.id, 0);
+            delete user.isBanned;
+            delete user.banExpiresAt;
+            delete user.banReason;
+            helpers.saveState();
             helpers.showToast(`${username} foi desbanido.`);
             banModal.remove();
             loadSection("players");
@@ -465,17 +429,6 @@ const CONFIG = {
             return helpers.showToast("O motivo é obrigatório.");
           }
 
-          // Soft-delete
-          state.users[username].isDeleted = true;
-          state.users[username].isBanned = true; // Impede login
-          state.users[
-            username
-          ].banReason = `Conta apagada por um administrador. Motivo: ${reason}`;
-
-          // Hard-delete (simulado, em um sistema real seria diferente)
-          // delete state.users[username];
-
-          helpers.saveState();
           helpers.showToast(`Conta de ${username} foi marcada como deletada.`);
           deleteModal.remove();
           loadSection("players");
@@ -501,7 +454,7 @@ const CONFIG = {
       };
 
       // Carrega a seção inicial (Dashboard)
-      loadSection("players"); // Carrega a seção de jogadores por padrão
+      loadSection("dashboard");
     },
   },
 };
