@@ -196,7 +196,7 @@ export async function createUser(username, email, pass) {
     CONFIG.users.defaultCredits || 0
   );
 
-  if (insertError) {
+  if (insertError || !newUser || newUser.length === 0) {
     return { ok: false, msg: "Erro ao criar conta. Tente novamente." };
   }
 
@@ -213,56 +213,40 @@ export async function createUser(username, email, pass) {
   saveState();
   return { ok: true };
 }
-export async function loginUser(username, pass) {
-  // Busca o usuário no Supabase
-  const { data: u, error } = await supabase
+
+export async function createUser(username, email, pass) {
+  // 1. Verifica se o usuário já existe no Supabase
+  const { data: existingUser, error: fetchError } = await supabase
     .from("users")
-    .select("*")
+    .select("id")
     .eq("nome", username)
     .single();
 
-  if (error || !u) return { ok: false, msg: "Usuário não encontrado" };
-
-  if (u.isBanned) {
-    if (u.isDeleted) {
-      return {
-        ok: false,
-        msg: `Sua conta foi apagada por um administrador. Motivo: ${
-          u.banReason || "N/A"
-        }`,
-      };
-    }
-    // Checa se o banimento expirou
-    if (u.banExpiresAt && Date.now() > u.banExpiresAt) {
-      delete u.isBanned;
-      delete u.banExpiresAt;
-      delete u.banReason;
-      saveState();
-      // Continua para o login normal
-    } else {
-      let banMsg = `Esta conta foi banida. Motivo: ${u.banReason || "N/A"}.`;
-      if (u.banExpiresAt) {
-        const remaining = new Date(u.banExpiresAt - Date.now())
-          .toISOString()
-          .substr(11, 8);
-        banMsg += ` Tempo restante: ${remaining}`;
-      }
-      return { ok: false, msg: banMsg };
-    }
+  if (existingUser) {
+    return { ok: false, msg: "Usuário já existe" };
   }
-  // Compara o hash da senha
-  if (u.pass_hash !== hash(pass)) return { ok: false, msg: "Senha inválida" };
 
-  // Login bem-sucedido
+  // 2. Cria o usuário no Supabase
+  const passHash = hash(pass);
+  const { data: newUser, error: insertError } = await criarUsuarioSupabase(
+    username,
+    passHash,
+    CONFIG.users.defaultCredits || 0
+  );
+
+  if (insertError) {
+    return { ok: false, msg: "Erro ao criar conta. Tente novamente." };
+  }
+
+  // 3. Loga o novo usuário
   state.currentUser = username;
-  // Armazena os dados essenciais do usuário no estado local
   state.users[username] = {
-    ...u,
-    history: [],
-    stats: { wins: 0, plays: 0 },
+    ...newUser[0], // Adiciona os dados do Supabase ao estado local
+    email, // Email não está no DB, mantemos localmente se necessário
+    history: [], // Inicializa localmente
     profilePic:
-      u.profilePic ||
       "https://i.pinimg.com/236x/21/9e/ae/219eaea67aafa864db091919ce3f5d82.jpg",
+    stats: { wins: 0, plays: 0, streak: 0 }, // Inicializa localmente
   };
   saveState();
   return { ok: true };
