@@ -6,7 +6,7 @@ import { supabase } from "./supabase.js";
 async function criarUsuarioSupabase(nome, passHash, saldo = 0) {
   const { data, error } = await supabase
     .from("users")
-    .insert([{ nome, pass_hash: passHash, saldo }]);
+    .insert([{ nome, saldo, pass_hash: passHash }]); // Garante que a coluna pass_hash seja enviada
   if (error) console.error("Erro ao criar usuário:", error);
   return { data, error };
 }
