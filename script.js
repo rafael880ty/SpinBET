@@ -171,29 +171,6 @@ function saveState() {
 /* ------------------------------
    AUTH / ACCOUNT MANAGEMENT
 ------------------------------ */
-export async function createUser(username, email, pass) {
-  // Simula busca no Supabase
-  const { data: u, error } = await supabase
-    .from("users")
-    .select("*")
-    .eq("nome", username)
-    .single();
-
-  if (error) return { ok: false, msg: "Erro ao criar conta." };
-
-  state.currentUser = username;
-  state.users[username] = {
-    ...u,
-    history: [],
-    stats: { wins: 0, plays: 0 },
-    profilePic:
-      u.profilePic ||
-      "https://i.pinimg.com/236x/21/9e/ae/219eaea67aafa864db091919ce3f5d82.jpg",
-  };
-  saveState();
-  return { ok: true };
-}
-
 function logout() {
   state.currentUser = null;
   saveState();
