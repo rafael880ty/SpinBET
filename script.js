@@ -155,15 +155,19 @@ function formatCurrency(value) {
    APP STATE
 ------------------------------ */
 let state = {
-  users: storage.get("mc_users", {}),
+  users: storage.get("mc_users", {}), // Carrega os usuários salvos
   currentUser: storage.get("mc_currentUser", null),
   settings: storage.get("mc_settings", { sound: true, theme: "dark" }),
-  missions: storage.get("mc_missions", {}),
+  missions: storage.get("mc_missions", {
+    plinkoPlays: 0,
+    completed: false,
+  }),
 };
 
 function saveState() {
-  storage.set("mc_users", state.users);
+  // Salva o usuário logado, suas configurações e o estado atual dos usuários em cache
   storage.set("mc_currentUser", state.currentUser);
+  storage.set("mc_users", state.users);
   storage.set("mc_settings", state.settings);
   storage.set("mc_missions", state.missions);
 }
@@ -174,28 +178,6 @@ function saveState() {
 function logout() {
   state.currentUser = null;
   saveState();
-  el("gameArea").style.display = "none";
-  renderAuth();
-  renderBalance();
-}
-
-async function deleteAccount() {
-  if (!state.currentUser) return;
-
-  const username = state.currentUser;
-  const u = state.users[username];
-
-  if (!u) return;
-
-  // Remove no Supabase
-  await supabase.from("users").delete().eq("id", u.id);
-
-  // Limpa do localStorage e estado
-  delete state.users[username];
-  state.currentUser = null;
-  saveState();
-
-  showToast("Conta excluída com sucesso.", 3000);
   renderAuth();
   renderBalance();
 }
@@ -203,41 +185,6 @@ async function deleteAccount() {
 /* ------------------------------
    INICIALIZAÇÃO
 ------------------------------ */
-async function init() {
-  document.title = CONFIG.site.title;
-  el("brand").querySelector("h1").innerText = CONFIG.site.title;
-  el("brand").querySelector(".logo").innerText = CONFIG.site.logo;
-
-  el("gameArea").style.display = "none";
-
-  // Se houver usuário logado, valida sessão
-  if (state.currentUser) {
-    const u = state.users[state.currentUser];
-    if (u) {
-      const { data: dbUser, error } = await supabase
-        .from("users")
-        .select("saldo, banido")
-        .eq("id", u.id)
-        .single();
-
-      if (error || !dbUser || dbUser.banido) {
-        showToast("Sua sessão expirou ou a conta foi desativada.", 4000);
-        logout();
-      } else {
-        state.users[state.currentUser].saldo = dbUser.saldo;
-        saveState();
-        showToast(`Bem-vindo de volta, ${state.currentUser}`, 2200);
-      }
-    }
-  }
-
-  renderAuth();
-  renderBalance();
-  renderGames("");
-  setupNav();
-  renderRanking();
-  checkAndShowAdminMessage();
-}
 
 export async function createUser(username, email, pass) {
   // 1. Verifica se o usuário já existe no Supabase
@@ -330,7 +277,12 @@ export async function loginUser(username, pass) {
   saveState();
   return { ok: true };
 }
+
 function logout() {
+  // Limpa o usuário atual e os dados em cache
+  if (state.currentUser) {
+    delete state.users[state.currentUser];
+  }
   state.currentUser = null;
   saveState();
   el("gameArea").style.display = "none"; // Esconde a área de jogo
@@ -338,12 +290,10 @@ function logout() {
   renderBalance();
   showToast("Desconectado");
 }
-function deleteAccount() {
+async function deleteAccount() {
   if (!state.currentUser) return;
-  // Aqui você adicionaria a lógica para deletar o usuário do Supabase
-  // Ex: await supabase.from('users').delete().eq('id', getUser().id);
-  // Limpa o usuário do estado local antes de deslogar
-  delete state.users[state.currentUser];
+  // Deleta do Supabase
+  await supabase.from("users").delete().eq("id", getUser().id);
   // Chama a função de logout para limpar completamente a sessão e a interface
   logout();
   showToast("Sua conta foi apagada com sucesso.");
@@ -446,13 +396,14 @@ function renderAuth() {
   const currentUserData = state.currentUser
     ? state.users[state.currentUser]
     : null;
-  if (el("accountInfo")) {
-    el("accountInfo").innerText = currentUserData
-      ? `Usuário: ${state.currentUser}\nSaldo: ${formatCurrency(
-          currentUserData.saldo
-        )} créditos`
-      : "Nenhum usuário conectado";
-  }
+  const accountInfoEl = el("accountInfo");
+  if (!accountInfoEl) return;
+
+  accountInfoEl.innerText = currentUserData
+    ? `Usuário: ${state.currentUser}\nSaldo: ${formatCurrency(
+        currentUserData.saldo
+      )} créditos`
+    : "Nenhum usuário conectado";
 
   // Atualiza o nome de usuário na barra lateral
   el("usernameDisplay").innerText = state.currentUser || "—";
@@ -2353,6 +2304,12 @@ el("withdrawBtn").onclick = () => {
   showToast("Sacado -" + val + " créditos");
 };
 async function init() {
+  // Aplica configurações do site
+  document.title = CONFIG.site.title;
+  el("brand").querySelector("h1").innerText = CONFIG.site.title;
+  el("brand").querySelector(".logo").innerText = CONFIG.site.logo;
+  el("gameArea").style.display = "none"; // Esconde a área de jogo inicialmente
+
   // show default dashboard
   if (el("nav-dashboard")) {
     show("dashboard");
@@ -2361,12 +2318,6 @@ async function init() {
   // mount quick events
   el("btnAction").onclick = () =>
     showToast("Selecione um jogo e pressione Jogar");
-
-  // Aplica configurações do site
-  document.title = CONFIG.site.title;
-  el("brand").querySelector("h1").innerText = CONFIG.site.title;
-  el("brand").querySelector(".logo").innerText = CONFIG.site.logo;
-  el("gameArea").style.display = "none"; // Esconde a área de jogo inicialmente
 
   // Lógica para mudar a foto de perfil (movido para init)
   el("profilePicInput").addEventListener("change", (event) => {
@@ -2397,36 +2348,37 @@ async function init() {
     reader.readAsDataURL(file);
   });
 
-  // Se houver um usuário salvo no localStorage, tenta restaurar e validar a sessão
+  // Se houver um usuário salvo no localStorage, tenta validar a sessão
   if (state.currentUser) {
     const userFromStorage = state.users[state.currentUser];
     // Se temos dados no storage, renderiza imediatamente para uma experiência rápida
-    if (userFromStorage) {
+    if (userFromStorage && userFromStorage.id) {
       // Valida a sessão com o Supabase em segundo plano
       const { data: dbUser, error } = await supabase
         .from("users")
         .select("saldo, banido")
         .eq("id", userFromStorage.id)
         .single();
+
       if (error || !dbUser || dbUser.banido) {
         showToast("Sua sessão expirou ou a conta foi desativada.", 4000);
         logout();
       } else {
         // Atualiza o saldo local com o do DB para garantir consistência
         state.users[state.currentUser].saldo = dbUser.saldo;
-        saveState();
         showToast("Bem-vindo de volta, " + state.currentUser, 2200);
       }
+    } else {
+      logout(); // Se não há dados no storage para o usuário logado, desloga.
     }
   }
 
-  // Renderiza a interface principal com os dados já carregados
+  // Renderiza a interface principal com os dados já carregados ou no estado de logout
   renderAuth();
   renderBalance();
   renderGames("");
   setupNav();
   renderRanking();
-
   checkAndShowAdminMessage(); // CORREÇÃO: Checa por mensagem no carregamento inicial
 }
 
