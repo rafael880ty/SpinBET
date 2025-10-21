@@ -696,28 +696,6 @@ function pushHistory(game, bet, result, info) {
   renderRanking();
 }
 
-function pushNotification(username, type, title, message) {
-  if (!state.users[username]) return;
-
-  const user = state.users[username];
-  if (!user.inbox) {
-    user.inbox = [];
-  }
-
-  user.inbox.unshift({
-    id: Date.now(), // ID simples baseado no timestamp
-    type,
-    title,
-    message,
-    timestamp: new Date().toISOString(),
-    read: false,
-  });
-
-  if (user.inbox.length > 100) user.inbox.pop(); // Limita o tamanho da caixa de entrada
-  saveState();
-  renderInboxBadge(); // Atualiza o contador de mensagens não lidas
-}
-
 /* ------------------------------
  GLOBAL BETTING SYSTEM
  ------------------------------ */
