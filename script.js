@@ -299,6 +299,18 @@ async function deleteAccount() {
  ------------------------------ */
 const el = (id) => document.getElementById(id);
 
+// Função para alternar a visibilidade das seções (MOVIDA PARA O TOPO)
+function show(id) {
+  ["dashboard", "history", "ranking", "bonuses", "settings", "support"].forEach(
+    (s) => {
+      const sectionEl = el("section-" + s);
+      if (sectionEl) sectionEl.style.display = s === id ? "block" : "none";
+      const navButton = el("nav-" + s);
+      if (navButton) navButton.classList.toggle("active", s === id);
+    }
+  );
+}
+
 function renderAuth() {
   const box = el("authBox");
   if (!box) return;
@@ -628,18 +640,6 @@ function setupNav() {
 
   const navLogout = el("nav-logout");
   if (navLogout) navLogout.onclick = () => logout();
-}
-
-// Função para alternar a visibilidade das seções
-function show(id) {
-  ["dashboard", "history", "ranking", "bonuses", "settings", "support"].forEach(
-    (s) => {
-      const sectionEl = el("section-" + s);
-      if (sectionEl) sectionEl.style.display = s === id ? "block" : "none";
-      const navButton = el("nav-" + s);
-      if (navButton) navButton.classList.toggle("active", s === id);
-    }
-  );
 }
 
 /* ------------------------------
