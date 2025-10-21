@@ -217,6 +217,7 @@ export async function loginUser(username, pass) {
     ...user, // id, nome, saldo, banido, pass_hash
     email: user.email || "", // Adicionar se existir no DB, senão, vazio
     history: [], // Inicializa localmente
+    inbox: [], // Inicializa localmente
     profilePic:
       "https://i.pinimg.com/236x/21/9e/ae/219eaea67aafa864db091919ce3f5d82.jpg",
     stats: { wins: 0, plays: 0, streak: 0 }, // Inicializa localmente
@@ -256,6 +257,7 @@ export async function createUser(username, email, pass) {
     ...newUser[0], // Adiciona os dados do Supabase ao estado local
     email, // Email não está no DB, mantemos localmente se necessário
     history: [], // Inicializa localmente
+    inbox: [], // Inicializa localmente
     profilePic:
       "https://i.pinimg.com/236x/21/9e/ae/219eaea67aafa864db091919ce3f5d82.jpg",
     stats: { wins: 0, plays: 0, streak: 0 }, // Inicializa localmente
@@ -271,7 +273,9 @@ function logout() {
   saveState();
 
   // Reseta a interface para o estado de "não logado"
-  el("gameArea").style.display = "none"; // Esconde a área de jogo
+  const gameAreaEl = el("gameArea");
+  if (gameAreaEl) gameAreaEl.style.display = "none"; // Esconde a área de jogo
+
   renderAuth();
   renderBalance();
   renderGames(""); // Mostra todos os jogos novamente
@@ -297,6 +301,7 @@ const el = (id) => document.getElementById(id);
 
 function renderAuth() {
   const box = el("authBox");
+  if (!box) return;
   box.innerHTML = "";
   if (!state.currentUser) {
     // show login / signup
@@ -315,55 +320,65 @@ function renderAuth() {
     )}</div>
 `;
     box.appendChild(form);
-    document.getElementById("btnLogin").onclick = () => {
-      const u = document.getElementById("authUser").value.trim();
-      const p = document.getElementById("authPass").value;
-      if (!u || !p) {
-        showToast("Preencha usuário e senha");
-        return;
-      }
-      loginUser(u, p).then((r) => {
-        if (!r.ok) showToast(r.msg);
-        else {
-          showToast("Bem-vindo, " + u);
-          renderAuth();
-          renderBalance();
-          renderGames("");
-          renderRanking(); // CORREÇÃO: Renderiza o ranking após o login
-          checkAndShowAdminMessage(); // CORREÇÃO: Checa por mensagem após o login
+    const btnLogin = document.getElementById("btnLogin");
+    if (btnLogin) {
+      btnLogin.onclick = () => {
+        const u = document.getElementById("authUser").value.trim();
+        const p = document.getElementById("authPass").value;
+        if (!u || !p) {
+          showToast("Preencha usuário e senha");
+          return;
         }
-      });
-    };
-    document.getElementById("btnSignup").onclick = () => {
-      const u = document.getElementById("authUser").value.trim();
-      const e = document.getElementById("authEmail").value.trim();
-      const p = document.getElementById("authPass").value;
-      if (!u || !e || !p) {
-        showToast("Preencha todos os campos");
-        return;
-      }
-      if (!/^\S+@\S+\.\S+$/.test(e)) {
-        showToast("Email inválido");
-        return;
-      }
-      if (p.length < 4) {
-        showToast("Senha muito curta (>=4)");
-        return;
-      }
-      createUser(u, e, p).then((r) => {
-        if (!r.ok) showToast(r.msg);
-        else {
-          showToast("Conta criada: " + u);
-          renderAuth();
-          renderBalance();
-          renderGames(""); // CORREÇÃO: Renderiza os jogos novamente após o cadastro.
-          renderRanking(); // CORREÇÃO: Renderiza o ranking após o cadastro
-          checkAndShowAdminMessage(); // CORREÇÃO: Checa por mensagem após o cadastro
+        loginUser(u, p).then((r) => {
+          if (!r.ok) showToast(r.msg);
+          else {
+            showToast("Bem-vindo, " + u);
+            renderAuth();
+            renderBalance();
+            renderGames("");
+            renderRanking();
+            checkAndShowAdminMessage();
+          }
+        });
+      };
+    }
+    const btnSignup = document.getElementById("btnSignup");
+    if (btnSignup) {
+      btnSignup.onclick = () => {
+        const u = document.getElementById("authUser").value.trim();
+        const e = document.getElementById("authEmail").value.trim();
+        const p = document.getElementById("authPass").value;
+        if (!u || !e || !p) {
+          showToast("Preencha todos os campos");
+          return;
         }
-      });
-    };
+        if (!/^\S+@\S+\.\S+$/.test(e)) {
+          showToast("Email inválido");
+          return;
+        }
+        if (p.length < 4) {
+          showToast("Senha muito curta (>=4)");
+          return;
+        }
+        createUser(u, e, p).then((r) => {
+          if (!r.ok) showToast(r.msg);
+          else {
+            showToast("Conta criada: " + u);
+            renderAuth();
+            renderBalance();
+            renderGames("");
+            renderRanking();
+            checkAndShowAdminMessage();
+          }
+        });
+      };
+    }
   } else {
     const user = state.users[state.currentUser];
+    if (!user) {
+      logout(); // Se os dados do usuário não existem, desloga
+      return;
+    }
     const form = document.createElement("div");
     const profilePicUrl =
       user.profilePic ||
@@ -374,19 +389,25 @@ function renderAuth() {
         ✉️
         <span id="inboxBadge" class="badge" style="display: none;"></span>
       </button>
-      <div style="text-align:right"><strong>${state.currentUser}</strong><div class="small-muted">${user.email || "Sem email"}</div></div>
+      <div style="text-align:right"><strong>${
+        state.currentUser
+      }</strong><div class="small-muted">${
+      user.email || "Sem email"
+    }</div></div>
       <img src="${profilePicUrl}" alt="Foto de Perfil" />
     `;
     box.appendChild(form);
-    el("inboxBtn").onclick = showInbox;
+    const inboxBtn = el("inboxBtn");
+    if (inboxBtn) inboxBtn.onclick = showInbox;
     renderInboxBadge();
   }
   // update accountInfo
   const currentUserData = state.currentUser
     ? state.users[state.currentUser]
     : null;
-  if (el("accountInfo")) {
-    el("accountInfo").innerText = currentUserData
+  const accountInfoEl = el("accountInfo");
+  if (accountInfoEl) {
+    accountInfoEl.innerText = currentUserData
       ? `Usuário: ${state.currentUser}\nSaldo: ${formatCurrency(
           currentUserData.saldo
         )} créditos`
@@ -394,7 +415,8 @@ function renderAuth() {
   }
 
   // Atualiza o nome de usuário na barra lateral
-  el("usernameDisplay").innerText = state.currentUser || "—";
+  const usernameDisplayEl = el("usernameDisplay");
+  if (usernameDisplayEl) usernameDisplayEl.innerText = state.currentUser || "—";
 }
 function renderInboxBadge() {
   // Proteção contra elemento ausente
@@ -403,11 +425,13 @@ function renderInboxBadge() {
     if (badge) badge.style.display = "none";
     return;
   }
-  if (!state.currentUser) return;
+  const user = getUser();
+  if (!user) return;
+
   const badge = el("inboxBadge");
   if (!badge) return;
 
-  const unreadCount = (getUser().inbox || []).filter((msg) => !msg.read).length;
+  const unreadCount = (user.inbox || []).filter((msg) => !msg.read).length;
   if (unreadCount > 0) {
     badge.innerText = unreadCount;
     badge.style.display = "block";
@@ -457,7 +481,9 @@ function showInbox() {
   };
 
   // Marcar mensagens como lidas
-  u.inbox.forEach((msg) => (msg.read = true));
+  if (u.inbox) {
+    u.inbox.forEach((msg) => (msg.read = true));
+  }
   saveState();
   renderInboxBadge();
 }
@@ -466,8 +492,9 @@ function renderBalance() {
   const user = getUser();
   // Garante que 'v' seja sempre um número
   const v = user?.saldo ?? 0;
-  if (el("balanceValue")) {
-    el("balanceValue").innerText = formatCurrency(v);
+  const balanceValueEl = el("balanceValue");
+  if (balanceValueEl) {
+    balanceValueEl.innerText = formatCurrency(v);
   }
 }
 
@@ -486,7 +513,8 @@ function renderGames(filter = "") {
     card.className = "game";
     card.innerHTML = `<img src="${g.img}" alt="${g.name}" />`;
     // Clique na imagem abre o jogo
-    card.querySelector("img").onclick = () => openGame(g.id);
+    const img = card.querySelector("img");
+    if (img) img.onclick = () => openGame(g.id);
     grid.appendChild(card);
   });
 }
@@ -499,7 +527,9 @@ function renderMiniHistory() {
     box.innerHTML = '<div class="small-muted">Entre para ver histórico</div>';
     return;
   }
-  const h = state.users[state.currentUser].history || [];
+  const u = getUser();
+  if (!u) return;
+  const h = u.history || [];
   h.slice()
     .reverse()
     .slice(0, 10)
@@ -523,7 +553,9 @@ function renderHistory() {
     box.innerHTML = '<div class="small-muted">Entre para ver histórico</div>';
     return;
   }
-  const h = state.users[state.currentUser].history || [];
+  const u = getUser();
+  if (!u) return;
+  const h = u.history || [];
   h.slice()
     .reverse()
     .forEach((it) => {
@@ -547,11 +579,13 @@ function renderRanking() {
   if (!box) return; // Proteção contra elemento ausente
   box.innerHTML = "";
   // gera o ranking por saldo
-  const arr = Object.keys(state.users).map((u) => ({
-    user: u,
-    balance: state.users[u].saldo, // CORREÇÃO: Usar 'saldo' ao invés de 'balance'
-    joined: state.users[u].joined,
-  }));
+  const arr = Object.keys(state.users)
+    .filter((u) => state.users[u] && typeof state.users[u].saldo === "number") // Filtra usuários inválidos
+    .map((u) => ({
+      user: u,
+      balance: state.users[u].saldo,
+      joined: state.users[u].joined,
+    }));
   arr.sort((a, b) => b.balance - a.balance);
   arr.forEach((r, idx) => {
     const div = document.createElement("div");
@@ -575,24 +609,40 @@ function setupNav() {
       "settings",
       "support",
     ].forEach((s) => {
-      el("section-" + s).style.display = s === id ? "block" : "none";
+      const sectionEl = el("section-" + s);
+      if (sectionEl) sectionEl.style.display = s === id ? "block" : "none";
       const navButton = el("nav-" + s);
       if (navButton) navButton.classList.toggle("active", s === id);
     });
   };
-  el("nav-dashboard").onclick = () => show("dashboard");
-  el("nav-history").onclick = () => {
-    show("history");
-    renderHistory();
-  };
-  el("nav-ranking").onclick = () => {
-    show("ranking");
-    renderRanking();
-  };
-  el("nav-bonuses").onclick = () => show("bonuses");
-  el("nav-settings").onclick = () => show("settings");
-  el("nav-support").onclick = () => show("support");
-  el("nav-logout").onclick = () => logout();
+  const navDashboard = el("nav-dashboard");
+  if (navDashboard) navDashboard.onclick = () => show("dashboard");
+
+  const navHistory = el("nav-history");
+  if (navHistory) {
+    navHistory.onclick = () => {
+      show("history");
+      renderHistory();
+    };
+  }
+  const navRanking = el("nav-ranking");
+  if (navRanking) {
+    navRanking.onclick = () => {
+      show("ranking");
+      renderRanking();
+    };
+  }
+  const navBonuses = el("nav-bonuses");
+  if (navBonuses) navBonuses.onclick = () => show("bonuses");
+
+  const navSettings = el("nav-settings");
+  if (navSettings) navSettings.onclick = () => show("settings");
+
+  const navSupport = el("nav-support");
+  if (navSupport) navSupport.onclick = () => show("support");
+
+  const navLogout = el("nav-logout");
+  if (navLogout) navLogout.onclick = () => logout();
 }
 
 /* ------------------------------
@@ -609,17 +659,36 @@ function ensureAuthOrWarn() {
 function openGame(gameId) {
   const g = GAMES.find((x) => x.id === gameId);
   if (!g) return;
-  if (!el("gameArea")) return; // Proteção
-  el("gameArea").style.display = "flex";
-  el("gameTitle").innerText = g.name;
-  el("gameSubtitle").innerText = g.cat;
-  el("betInput").value = 10;
-  el("gameCanvas").innerHTML = "";
-  el("globalBetControls").style.display = "none"; // Esconde por padrão
-  el("btnAction").style.display = "block"; // Garante que o botão Jogar seja visível por padrão
-  el("gameCanvas").classList.remove("is-slot-game"); // remove classe de slot
-  el("gameInfo").innerText = g.desc;
-  el("btnAction").innerText = "Jogar";
+  const gameAreaEl = el("gameArea");
+  if (!gameAreaEl) return; // Proteção
+
+  gameAreaEl.style.display = "flex";
+  const gameTitleEl = el("gameTitle");
+  if (gameTitleEl) gameTitleEl.innerText = g.name;
+
+  const gameSubtitleEl = el("gameSubtitle");
+  if (gameSubtitleEl) gameSubtitleEl.innerText = g.cat;
+
+  const betInputEl = el("betInput");
+  if (betInputEl) betInputEl.value = 10;
+
+  const gameCanvasEl = el("gameCanvas");
+  if (gameCanvasEl) {
+    gameCanvasEl.innerHTML = "";
+    gameCanvasEl.classList.remove("is-slot-game"); // remove classe de slot
+  }
+
+  const globalBetControlsEl = el("globalBetControls");
+  if (globalBetControlsEl) globalBetControlsEl.style.display = "none"; // Esconde por padrão
+
+  const btnActionEl = el("btnAction");
+  if (btnActionEl) {
+    btnActionEl.style.display = "block"; // Garante que o botão Jogar seja visível por padrão
+    btnActionEl.innerText = "Jogar";
+  }
+
+  const gameInfoEl = el("gameInfo");
+  if (gameInfoEl) gameInfoEl.innerText = g.desc;
 
   // Incrementa missões de Plinko
   if (gameId === "plinko" && state.currentUser && !state.missions.completed) {
@@ -656,8 +725,9 @@ function openGame(gameId) {
   ) {
     setupSlot(gameId);
   } else {
-    el("gameCanvas").innerHTML =
-      '<div class="small-muted">Jogo não implementado completamente.</div>';
+    if (gameCanvasEl)
+      gameCanvasEl.innerHTML =
+        '<div class="small-muted">Jogo não implementado completamente.</div>';
     setupGlobalBetControls();
   }
   renderMiniHistory();
@@ -676,9 +746,33 @@ async function adjustBalance(delta) {
   await definirSaldo(u.id, newBalance); // Atualiza no DB
   saveState(); // Salva o novo estado no localStorage
 }
+
+function pushNotification(username, type, title, message) {
+  if (!state.users[username]) return;
+
+  const user = state.users[username];
+  if (!user.inbox) {
+    user.inbox = [];
+  }
+
+  user.inbox.unshift({
+    id: Date.now(), // ID simples baseado no timestamp
+    type,
+    title,
+    message,
+    timestamp: new Date().toISOString(),
+    read: false,
+  });
+
+  if (user.inbox.length > 100) user.inbox.pop(); // Limita o tamanho da caixa de entrada
+  saveState();
+  renderInboxBadge(); // Atualiza o contador de mensagens não lidas
+}
+
 function pushHistory(game, bet, result, info) {
   if (!state.currentUser) return;
   const u = getUser();
+  if (!u) return;
   const entry = {
     game,
     bet,
@@ -710,10 +804,13 @@ function pushHistory(game, bet, result, info) {
  ------------------------------ */
 function setupGlobalBetControls() {
   const betControlsContainer = el("globalBetControls");
+  if (!betControlsContainer) return;
   betControlsContainer.style.display = "flex";
 
   const betDisplayEl = el("globalBetDisplay");
   const betInputEl = el("betInput"); // O input original, agora usado como "dado oculto"
+
+  if (!betDisplayEl || !betInputEl) return;
 
   let bet = 0.05;
 
@@ -768,8 +865,12 @@ function setupGlobalBetControls() {
 
   // Atribui os eventos uma única vez para evitar duplicação
   if (!betControlsContainer.dataset.initialized) {
-    el("globalBetDown").onclick = () => changeBet(-1);
-    el("globalBetUp").onclick = () => changeBet(1);
+    const globalBetDown = el("globalBetDown");
+    if (globalBetDown) globalBetDown.onclick = () => changeBet(-1);
+
+    const globalBetUp = el("globalBetUp");
+    if (globalBetUp) globalBetUp.onclick = () => changeBet(1);
+
     betControlsContainer.dataset.initialized = "true";
   }
 
@@ -784,6 +885,7 @@ function setupDouble(gameId) {
   const isFortune = gameId === "fortune-double";
 
   const canvasEl = el("gameCanvas");
+  if (!canvasEl) return;
   canvasEl.innerHTML = `
     <div class="double-game ${isFortune ? "fortune-double-theme" : ""}">
       <div id="doubleHistory" class="double-history"></div>
@@ -827,6 +929,9 @@ function setupDouble(gameId) {
   const rouletteEl = el("doubleRoulette");
   const historyEl = el("doubleHistory");
   const betPanels = canvasEl.querySelectorAll(".double-bet-panel");
+  const btnActionEl = el("btnAction");
+
+  if (!rouletteEl || !historyEl || !btnActionEl) return;
 
   let history = [];
   let bets = { red: 0, white: 0, gold: 0, black: 0 }; // Objeto de apostas unificado
@@ -868,17 +973,19 @@ function setupDouble(gameId) {
 
   async function spinRoulette() {
     if (isSpinning) return;
+    const u = getUser();
+    if (!u) return;
 
     const totalBet = Object.values(bets).reduce((sum, val) => sum + val, 0);
     if (totalBet === 0) {
       return showToast("Faça uma aposta antes de girar.");
     }
-    if (totalBet > getUser().saldo) {
+    if (totalBet > u.saldo) {
       return showToast("Saldo insuficiente para cobrir as apostas.");
     }
 
     isSpinning = true;
-    el("btnAction").disabled = true;
+    btnActionEl.disabled = true;
     betPanels.forEach((p) => p.classList.remove("win", "loss"));
 
     adjustBalance(-totalBet);
@@ -907,9 +1014,9 @@ function setupDouble(gameId) {
           const multiplier = color === "white" ? 14 : 2;
           const winAmount = bets[color] * multiplier;
           totalWin += winAmount;
-          panel.classList.add("win");
+          if (panel) panel.classList.add("win");
         } else {
-          panel.classList.add("loss");
+          if (panel) panel.classList.add("loss");
         }
       }
     });
@@ -936,32 +1043,39 @@ function setupDouble(gameId) {
     // Reset for next round
     bets = { red: 0, white: 0, gold: 0, black: 0 };
     betPanels.forEach((p) => {
-      p.querySelector(".double-bet-amount").innerText = "R$ 0,00";
+      const amountEl = p.querySelector(".double-bet-amount");
+      if (amountEl) amountEl.innerText = "R$ 0,00";
     });
     isSpinning = false;
-    el("btnAction").disabled = false;
+    btnActionEl.disabled = false;
     rouletteEl.style.transition = "none";
     rouletteEl.style.transform = "translateX(0)";
   }
 
   betPanels.forEach((panel) => {
-    panel.querySelector("button").onclick = (e) => {
-      if (isSpinning) return showToast("Aguarde o fim da rodada para apostar.");
-      if (!ensureAuthOrWarn()) return;
-      const bet = Number(el("betInput").value) || 0;
-      if (bet < 1) return showToast("Aposta mínima 1");
+    const button = panel.querySelector("button");
+    if (button) {
+      button.onclick = (e) => {
+        if (isSpinning)
+          return showToast("Aguarde o fim da rodada para apostar.");
+        if (!ensureAuthOrWarn()) return;
+        const betInputEl = el("betInput");
+        const bet = Number(betInputEl?.value) || 0;
+        if (bet < 1) return showToast("Aposta mínima 1");
 
-      const color = e.target.dataset.color;
-      bets[color] += bet;
-      panel.querySelector(
-        ".double-bet-amount"
-      ).innerText = `R$ ${formatCurrency(bets[color])}`;
-      showToast(`Apostou R$ ${formatCurrency(bet)} no ${color.toUpperCase()}`);
-    };
+        const color = e.target.dataset.color;
+        bets[color] += bet;
+        const amountEl = panel.querySelector(".double-bet-amount");
+        if (amountEl) amountEl.innerText = `R$ ${formatCurrency(bets[color])}`;
+        showToast(
+          `Apostou R$ ${formatCurrency(bet)} no ${color.toUpperCase()}`
+        );
+      };
+    }
   });
 
-  el("btnAction").innerText = "Girar";
-  el("btnAction").onclick = spinRoulette;
+  btnActionEl.innerText = "Girar";
+  btnActionEl.onclick = spinRoulette;
   populateRoulette();
   updateHistory();
 }
@@ -971,6 +1085,7 @@ function setupDouble(gameId) {
  ------------------------------ */
 function setupDice() {
   const canvasEl = el("gameCanvas");
+  if (!canvasEl) return;
   canvasEl.innerHTML = `
     <div class="dice-game">
       <div class="dice-display">
@@ -1007,6 +1122,19 @@ function setupDice() {
   const resultEl = el("diceResult");
   const historyEl = el("diceHistory");
   const diceGameContainer = canvasEl.querySelector(".dice-game");
+  const btnActionEl = el("btnAction");
+
+  if (
+    !slider ||
+    !multiplierEl ||
+    !winChanceEl ||
+    !targetEl ||
+    !resultEl ||
+    !historyEl ||
+    !diceGameContainer ||
+    !btnActionEl
+  )
+    return;
 
   let history = [];
 
@@ -1021,13 +1149,14 @@ function setupDice() {
 
   slider.addEventListener("input", updateUI);
 
-  el("btnAction").onclick = () => {
+  btnActionEl.onclick = () => {
     if (!ensureAuthOrWarn()) return;
-    const bet = Number(el("betInput").value) || 0;
+    const betInputEl = el("betInput");
+    const bet = Number(betInputEl?.value) || 0;
     if (bet < 1) return showToast("Aposta mínima 1");
 
     const u = getUser();
-    if (bet > u.saldo) return showToast("Saldo insuficiente");
+    if (!u || bet > u.saldo) return showToast("Saldo insuficiente");
 
     adjustBalance(-bet);
 
@@ -1097,6 +1226,7 @@ function setupDice() {
  ------------------------------ */
 function setupMines() {
   const canvasEl = el("gameCanvas");
+  if (!canvasEl) return;
   canvasEl.innerHTML = "";
 
   // --- State variables ---
@@ -1124,15 +1254,17 @@ function setupMines() {
 
   // Adiciona a lógica para corrigir o valor das bombas
   const bombsInput = el("minesBombs");
-  bombsInput.addEventListener("change", () => {
-    let value = parseInt(bombsInput.value, 10);
-    if (isNaN(value) || value < 1) {
-      value = 1;
-    } else if (value > 24) {
-      value = 24;
-    }
-    bombsInput.value = value;
-  });
+  if (bombsInput) {
+    bombsInput.addEventListener("change", () => {
+      let value = parseInt(bombsInput.value, 10);
+      if (isNaN(value) || value < 1) {
+        value = 1;
+      } else if (value > 24) {
+        value = 24;
+      }
+      bombsInput.value = value;
+    });
+  }
 
   const board = document.createElement("div");
   board.className = "mines-board";
@@ -1158,7 +1290,7 @@ function setupMines() {
   }
 
   function clickCell(e) {
-    if (gameOver || e.target.dataset.revealed) return;
+    if (gameOver || !e.target.dataset || e.target.dataset.revealed) return;
 
     const cell = e.target;
     const idx = Number(cell.dataset.idx);
@@ -1172,9 +1304,12 @@ function setupMines() {
       pushHistory("Mines", -bet, "LOSS", `Explodiu com ${bombs} bombas`);
       showToast("Mina! Você perdeu.");
       revealBoard();
-      el("btnAction").innerText = "Jogar Novamente";
-      el("minesBombs").disabled = false; // Reabilita o input de bombas
-      el("btnAction").onclick = () => openGame("mines");
+      const btnActionEl = el("btnAction");
+      if (btnActionEl) {
+        btnActionEl.innerText = "Jogar Novamente";
+        btnActionEl.onclick = () => openGame("mines");
+      }
+      if (bombsInput) bombsInput.disabled = false; // Reabilita o input de bombas
     } else {
       // --- HIT A SAFE SPOT ---
       cell.dataset.revealed = "true";
@@ -1190,17 +1325,25 @@ function setupMines() {
 
       const potentialWin = Math.floor(bet * multiplier);
 
-      el("minesMultiplier").innerText = `${multiplier.toFixed(2)}x`;
-      el("minesProfit").innerText = potentialWin; // CORREÇÃO: Mostra o valor total do saque
-      el("btnAction").disabled = false; // Habilita o botão de sacar
+      const minesMultiplierEl = el("minesMultiplier");
+      if (minesMultiplierEl)
+        minesMultiplierEl.innerText = `${multiplier.toFixed(2)}x`;
+
+      const minesProfitEl = el("minesProfit");
+      if (minesProfitEl) minesProfitEl.innerText = potentialWin;
+
+      const btnActionEl = el("btnAction");
+      if (btnActionEl) btnActionEl.disabled = false; // Habilita o botão de sacar
     }
   }
 
   function startGame() {
     if (!ensureAuthOrWarn()) return;
-    bet = Number(el("betInput").value) || 0;
+    const betInputEl = el("betInput");
+    bet = Number(betInputEl?.value) || 0;
     if (bet < 1) return showToast("Aposta mínima 1");
-    if (bet > u.saldo) return showToast("Saldo insuficiente");
+    const u = getUser();
+    if (!u || bet > u.saldo) return showToast("Saldo insuficiente");
 
     adjustBalance(-bet);
 
@@ -1208,7 +1351,7 @@ function setupMines() {
     gameOver = false;
     revealedCount = 0;
     multiplier = 1;
-    bombs = parseInt(el("minesBombs").value, 10);
+    bombs = parseInt(bombsInput?.value, 10) || 4;
     bombPositions = new Set();
     while (bombPositions.size < bombs)
       bombPositions.add(Math.floor(Math.random() * size * size));
@@ -1225,38 +1368,51 @@ function setupMines() {
       cells.push(c);
     }
 
-    el("minesBombs").disabled = true;
-    el("minesInfoBar").style.display = "flex";
-    el("minesMultiplier").innerText = "1.00x";
-    el("minesProfit").innerText = "0";
+    if (bombsInput) bombsInput.disabled = true;
+    const minesInfoBarEl = el("minesInfoBar");
+    if (minesInfoBarEl) minesInfoBarEl.style.display = "flex";
 
-    el("btnAction").innerText = "Sacar";
-    el("btnAction").disabled = true; // Desabilita até o primeiro clique
-    el("btnAction").onclick = () => {
-      if (gameOver || revealedCount === 0) return;
-      const win = Math.floor(bet * multiplier);
-      adjustBalance(win);
-      pushHistory(
-        "Mines",
-        bet,
-        "WIN",
-        `${revealedCount} casas • ${bombs} bombas • x${multiplier.toFixed(
-          2
-        )} -> +${win}`
-      );
-      showToast(`Você sacou ${win} créditos!`);
-      revealBoard();
-      renderBalance();
-      el("btnAction").innerText = "Jogar Novamente";
-      el("btnAction").onclick = () => openGame("mines");
-    };
+    const minesMultiplierEl = el("minesMultiplier");
+    if (minesMultiplierEl) minesMultiplierEl.innerText = "1.00x";
+
+    const minesProfitEl = el("minesProfit");
+    if (minesProfitEl) minesProfitEl.innerText = "0";
+
+    const btnActionEl = el("btnAction");
+    if (btnActionEl) {
+      btnActionEl.innerText = "Sacar";
+      btnActionEl.disabled = true; // Desabilita até o primeiro clique
+      btnActionEl.onclick = () => {
+        if (gameOver || revealedCount === 0) return;
+        const win = Math.floor(bet * multiplier);
+        adjustBalance(win);
+        pushHistory(
+          "Mines",
+          bet,
+          "WIN",
+          `${revealedCount} casas • ${bombs} bombas • x${multiplier.toFixed(
+            2
+          )} -> +${win}`
+        );
+        showToast(`Você sacou ${win} créditos!`);
+        revealBoard();
+        renderBalance();
+        btnActionEl.innerText = "Jogar Novamente";
+        btnActionEl.onclick = () => openGame("mines");
+      };
+    }
   }
 
   // --- Initial Setup ---
-  el("btnAction").innerText = "Começar Jogo";
-  el("btnAction").onclick = startGame;
-  el("gameInfo").innerText =
-    "Escolha a quantidade de bombas e clique em 'Começar Jogo'.";
+  const btnActionEl = el("btnAction");
+  if (btnActionEl) {
+    btnActionEl.innerText = "Começar Jogo";
+    btnActionEl.onclick = startGame;
+  }
+  const gameInfoEl = el("gameInfo");
+  if (gameInfoEl)
+    gameInfoEl.innerText =
+      "Escolha a quantidade de bombas e clique em 'Começar Jogo'.";
 }
 
 /* ------------------------------
@@ -1264,6 +1420,7 @@ function setupMines() {
  ------------------------------ */
 function setupPlinko() {
   const canvasEl = el("gameCanvas");
+  if (!canvasEl) return;
   canvasEl.innerHTML = "";
 
   // --- Controles do Jogo ---
@@ -1304,11 +1461,14 @@ function setupPlinko() {
     high: [1000, 130, 26, 9, 4, 2, 0.2, 0.2, 2, 4, 9, 26, 130, 1000],
   };
 
+  const plinkoRiskEl = el("plinkoRisk");
+  const plinkoRowsEl = el("plinkoRows");
+
   function setupBoard() {
     pins = [];
     multipliers = [];
-    const rows = parseInt(el("plinkoRows").value, 10);
-    const risk = el("plinkoRisk").value;
+    const rows = parseInt(plinkoRowsEl?.value, 10) || 12;
+    const risk = plinkoRiskEl?.value || "medium";
 
     const pinSize = 5;
     const startY = 60;
@@ -1415,7 +1575,6 @@ function setupPlinko() {
             pushHistory("Plinko", -lossAmount, "LOSS", `x${multiplier.value}`);
             showToast(`Perdeu ${lossAmount} créditos (x${multiplier.value})`);
           }
-
         }
         balls.splice(ballIndex, 1); // Remove a bola
       }
@@ -1425,31 +1584,37 @@ function setupPlinko() {
     requestAnimationFrame(update);
   }
 
-  el("plinkoRisk").onchange = setupBoard;
-  el("plinkoRows").onchange = setupBoard;
+  if (plinkoRiskEl) plinkoRiskEl.onchange = setupBoard;
+  if (plinkoRowsEl) plinkoRowsEl.onchange = setupBoard;
 
-  el("btnAction").onclick = () => {
-    if (!ensureAuthOrWarn()) return;
-    const bet = Number(el("betInput").value) || 0;
-    if (bet < 1) return showToast("Aposta mínima 1");
-    if (bet > u.saldo) return showToast("Saldo insuficiente");
+  const btnActionEl = el("btnAction");
+  if (btnActionEl) {
+    btnActionEl.onclick = () => {
+      if (!ensureAuthOrWarn()) return;
+      const betInputEl = el("betInput");
+      const bet = Number(betInputEl?.value) || 0;
+      if (bet < 1) return showToast("Aposta mínima 1");
+      const u = getUser();
+      if (!u || bet > u.saldo) return showToast("Saldo insuficiente");
 
-    adjustBalance(-bet);
-    balls.push({
-      x: canvas.width / 2,
-      y: 20,
-      vx: (Math.random() - 0.5) * 2,
-      vy: 1,
-      radius: 7,
-      color: "#f6b93b",
-      bet,
-    });
-  };
+      adjustBalance(-bet);
+      balls.push({
+        x: canvas.width / 2,
+        y: 20,
+        vx: (Math.random() - 0.5) * 2,
+        vy: 1,
+        radius: 7,
+        color: "#f6b93b",
+        bet,
+      });
+    };
+  }
 
   setupBoard();
   update();
-  el("gameInfo").innerText =
-    "Solte a bola e torça por um grande multiplicador!";
+  const gameInfoEl = el("gameInfo");
+  if (gameInfoEl)
+    gameInfoEl.innerText = "Solte a bola e torça por um grande multiplicador!";
 }
 /* ------------------------------
  GAME: Fruit Slice (simplified)
@@ -1461,8 +1626,9 @@ let fruitSliceGame = {
 };
 
 function setupFruitSlice() {
-  const canvas = el("gameCanvas");
-  canvas.innerHTML = ""; // Limpa conteúdo anterior
+  const canvasEl = el("gameCanvas");
+  if (!canvasEl) return;
+  canvasEl.innerHTML = ""; // Limpa conteúdo anterior
   const gameCanvas = document.createElement("canvas");
   gameCanvas.width = 500;
   gameCanvas.height = 300;
@@ -1560,10 +1726,12 @@ function setupFruitSlice() {
         } else {
           obj.sliced = true;
           score++;
-          el("gameInfo").innerText = `Pontos: ${score} | Multiplicador: ${(
-            1 +
-            score * 0.4
-          ).toFixed(2)}x`;
+          const gameInfoEl = el("gameInfo");
+          if (gameInfoEl)
+            gameInfoEl.innerText = `Pontos: ${score} | Multiplicador: ${(
+              1 +
+              score * 0.4
+            ).toFixed(2)}x`;
           // Efeito de corte
           obj.text = "💥";
           setTimeout(() => (obj.text = ""), 200);
@@ -1577,7 +1745,8 @@ function setupFruitSlice() {
     clearInterval(fruitSliceGame.interval);
     cancelAnimationFrame(fruitSliceGame.animationFrame);
     objects = [];
-    el("btnAction").innerText = "Jogar";
+    const btnActionEl = el("btnAction");
+    if (btnActionEl) btnActionEl.innerText = "Jogar";
   }
 
   gameCanvas.addEventListener("mousedown", () => (isSlicing = true));
@@ -1594,33 +1763,39 @@ function setupFruitSlice() {
     handleSlice(e.clientX - rect.left, e.clientY - rect.top);
   });
 
-  el("gameInfo").innerText = "Corte as frutas e desvie das bombas!";
-  el("btnAction").onclick = () => {
-    if (fruitSliceGame.running) {
-      // Resgatar ganhos
-      const payout = Math.floor(bet * (1 + score * 0.4));
-      adjustBalance(payout);
-      pushHistory("FruitSlice", bet, "WIN", `Score:${score} -> +${payout}`);
-      showToast("Você ganhou " + payout + " créditos");
-      endGame();
-      return;
-    }
+  const gameInfoEl = el("gameInfo");
+  if (gameInfoEl) gameInfoEl.innerText = "Corte as frutas e desvie das bombas!";
 
-    if (!ensureAuthOrWarn()) return;
-    bet = Number(el("betInput").value) || 0;
-    if (bet < 1) return showToast("Aposta mínima 1");
-    const u = getUser();
-    if (bet > u.saldo) return showToast("Saldo insuficiente");
+  const btnActionEl = el("btnAction");
+  if (btnActionEl) {
+    btnActionEl.onclick = () => {
+      if (fruitSliceGame.running) {
+        // Resgatar ganhos
+        const payout = Math.floor(bet * (1 + score * 0.4));
+        adjustBalance(payout);
+        pushHistory("FruitSlice", bet, "WIN", `Score:${score} -> +${payout}`);
+        showToast("Você ganhou " + payout + " créditos");
+        endGame();
+        return;
+      }
 
-    renderBalance();
+      if (!ensureAuthOrWarn()) return;
+      const betInputEl = el("betInput");
+      bet = Number(betInputEl?.value) || 0;
+      if (bet < 1) return showToast("Aposta mínima 1");
+      const u = getUser();
+      if (!u || bet > u.saldo) return showToast("Saldo insuficiente");
 
-    score = 0;
-    fruitSliceGame.running = true;
-    el("btnAction").innerText = "Resgatar";
-    el("gameInfo").innerText = "Pontos: 0 | Multiplicador: 1.00x";
-    fruitSliceGame.interval = setInterval(spawnObject, 800);
-    update();
-  };
+      renderBalance();
+
+      score = 0;
+      fruitSliceGame.running = true;
+      btnActionEl.innerText = "Resgatar";
+      if (gameInfoEl) gameInfoEl.innerText = "Pontos: 0 | Multiplicador: 1.00x";
+      fruitSliceGame.interval = setInterval(spawnObject, 800);
+      update();
+    };
+  }
 }
 
 /* ------------------------------
@@ -1628,15 +1803,21 @@ function setupFruitSlice() {
  ------------------------------ */
 function setupSlot(gameId) {
   // Esconde os controles de aposta globais, pois o slot tem os seus próprios
-  el("globalBetControls").style.display = "none";
-  el("btnAction").style.display = "none"; // Esconde o botão "Jogar" genérico
-  el("betInput").style.display = "none";
+  const globalBetControlsEl = el("globalBetControls");
+  if (globalBetControlsEl) globalBetControlsEl.style.display = "none";
+
+  const btnActionEl = el("btnAction");
+  if (btnActionEl) btnActionEl.style.display = "none"; // Esconde o botão "Jogar" genérico
+
+  const betInputEl = el("betInput");
+  if (betInputEl) betInputEl.style.display = "none";
 
   // 1. Limpa a área do jogo e prepara o layout específico do slot
   const gameArea = el("gameArea");
   const gameCanvas = el("gameCanvas");
   const gameInfo = el("gameInfo");
-  const genericBetControls = gameArea.querySelector(".bet-controls");
+
+  if (!gameArea || !gameCanvas || !gameInfo) return;
 
   gameInfo.style.display = "none";
 
@@ -1732,14 +1913,13 @@ function setupSlot(gameId) {
     ingot: { id: "ingot", icon: "💎", value: 3, isBonus: false },
   };
 
-  const SYMBOLS = // CORREÇÃO: Removida a declaração duplicada que causava o erro.
-    isFortuneDragon
-      ? DRAGON_SYMBOLS
-      : isFortuneOx
-      ? OX_SYMBOLS
-      : isFortuneRabbit
-      ? RABBIT_SYMBOLS
-      : TIGER_SYMBOLS;
+  const SYMBOLS = isFortuneDragon
+    ? DRAGON_SYMBOLS
+    : isFortuneOx
+    ? OX_SYMBOLS
+    : isFortuneRabbit
+    ? RABBIT_SYMBOLS
+    : TIGER_SYMBOLS;
   const SYMBOL_LIST = Object.values(SYMBOLS);
   const PAYLINES = [
     [0, 1, 2],
@@ -1768,13 +1948,16 @@ function setupSlot(gameId) {
   });
 
   const linesCanvas = el("slotLinesCanvas");
+  if (!linesCanvas) return;
   const linesCtx = linesCanvas.getContext("2d");
   const slotReelsEl = el("slot-reels");
-  setTimeout(() => {
-    // Atraso para garantir que as dimensões estejam corretas
-    linesCanvas.width = slotReelsEl.clientWidth;
-    linesCanvas.height = slotReelsEl.clientHeight;
-  }, 100);
+  if (slotReelsEl) {
+    setTimeout(() => {
+      // Atraso para garantir que as dimensões estejam corretas
+      linesCanvas.width = slotReelsEl.clientWidth;
+      linesCanvas.height = slotReelsEl.clientHeight;
+    }, 100);
+  }
 
   // 5. Funções auxiliares do jogo
   const formatBetDisplay = (value) => formatCurrency(value);
@@ -1817,28 +2000,39 @@ function setupSlot(gameId) {
     bet = Math.max(0.05, Math.min(newBet, MAX_BET));
 
     const betDisplayEl = el("slotBet");
-    betDisplayEl.innerText = formatBetDisplay(bet);
-
-    // Adiciona a classe de animação e a remove após um curto período
-    betDisplayEl.classList.add("bet-change-animation");
-    setTimeout(
-      () => betDisplayEl.classList.remove("bet-change-animation"),
-      200
-    );
+    if (betDisplayEl) {
+      betDisplayEl.innerText = formatBetDisplay(bet);
+      // Adiciona a classe de animação e a remove após um curto período
+      betDisplayEl.classList.add("bet-change-animation");
+      setTimeout(
+        () => betDisplayEl.classList.remove("bet-change-animation"),
+        200
+      );
+    }
   }
 
   function setControlsDisabled(disabled) {
     const isAutoSpinning = isAuto && isSpinning;
-    el("slotSpin").disabled = disabled || isAutoSpinning;
-    el("betUp").disabled = disabled || isAutoSpinning;
-    el("betDown").disabled = disabled || isAutoSpinning;
-    el("slotTurbo").disabled = disabled || isAutoSpinning;
+    const slotSpinEl = el("slotSpin");
+    if (slotSpinEl) slotSpinEl.disabled = disabled || isAutoSpinning;
+
+    const betUpEl = el("betUp");
+    if (betUpEl) betUpEl.disabled = disabled || isAutoSpinning;
+
+    const betDownEl = el("betDown");
+    if (betDownEl) betDownEl.disabled = disabled || isAutoSpinning;
+
+    const slotTurboEl = el("slotTurbo");
+    if (slotTurboEl) slotTurboEl.disabled = disabled || isAutoSpinning;
+
     // O botão Auto só é desabilitado durante um giro manual.
-    el("slotAuto").disabled = disabled && !isAuto;
+    const slotAutoEl = el("slotAuto");
+    if (slotAutoEl) slotAutoEl.disabled = disabled && !isAuto;
   }
 
   function showWinAnimation(type, amount) {
     const overlay = el("slotOverlay");
+    if (!overlay) return;
     overlay.innerHTML = `
         <div id="coin-container"></div>
         <div class="win-text-container">
@@ -1849,6 +2043,7 @@ function setupSlot(gameId) {
     overlay.classList.add("active");
 
     const winAmountEl = el("winAmountCounter");
+    if (!winAmountEl) return;
     let start = 0;
     const duration = 1500;
     const increment = amount / (duration / (1000 / 60));
@@ -1862,19 +2057,21 @@ function setupSlot(gameId) {
     }, 1000 / 60);
 
     const coinContainer = el("coin-container");
-    for (let i = 0; i < 50; i++) {
-      const coin = document.createElement("div");
-      coin.className = "coin";
-      coin.style.left = `${Math.random() * 100}%`;
-      coin.style.animationDelay = `${Math.random() * 2}s`;
-      coin.style.setProperty("--i", Math.random());
-      coinContainer.appendChild(coin);
+    if (coinContainer) {
+      for (let i = 0; i < 50; i++) {
+        const coin = document.createElement("div");
+        coin.className = "coin";
+        coin.style.left = `${Math.random() * 100}%`;
+        coin.style.animationDelay = `${Math.random() * 2}s`;
+        coin.style.setProperty("--i", Math.random());
+        coinContainer.appendChild(coin);
+      }
     }
 
     setTimeout(() => {
       overlay.style.display = "none";
       overlay.classList.remove("active");
-      coinContainer.innerHTML = "";
+      if (coinContainer) coinContainer.innerHTML = "";
     }, 3500);
   }
 
@@ -1923,18 +2120,17 @@ function setupSlot(gameId) {
       const visualIndex = visualMap(index);
       const symbolContainer =
         document.querySelectorAll(".symbol-container")[visualIndex];
-      symbolContainer.classList.add("win-highlight");
+      if (symbolContainer) symbolContainer.classList.add("win-highlight");
     });
   }
 
   // 6. Função principal de giro (doSpin)
   async function doSpin() {
-    // CORREÇÃO DEFINITIVA: O bloco try...finally garante que os botões
+    const slotAutoEl = el("slotAuto");
     // Este bloco é para o modo AutoPlay
-    if (isAuto && freeSpinsRemaining > 0) {
-      el("slotAuto").innerText = freeSpinsRemaining;
+    if (isAuto && freeSpinsRemaining > 0 && slotAutoEl) {
+      slotAutoEl.innerText = freeSpinsRemaining;
     }
-    // SEMPRE serão reativados, mesmo que ocorra um erro inesperado.
     try {
       if (isSpinning) return;
       if (!ensureAuthOrWarn()) return;
@@ -1945,10 +2141,10 @@ function setupSlot(gameId) {
       }
 
       const u = getUser();
-      if (bet > u.saldo) {
+      if (!u || bet > u.saldo) {
         showToast("Saldo insuficiente");
         isAuto = false;
-        el("slotAuto").classList.remove("active");
+        if (slotAutoEl) slotAutoEl.classList.remove("active");
         return;
       }
 
@@ -1959,8 +2155,12 @@ function setupSlot(gameId) {
         adjustBalance(-bet);
       }
 
-      el("slotBalance").innerText = formatCurrency(u.saldo);
-      el("slotWin").innerText = 0;
+      const slotBalanceEl = el("slotBalance");
+      if (slotBalanceEl) slotBalanceEl.innerText = formatCurrency(u.saldo);
+
+      const slotWinEl = el("slotWin");
+      if (slotWinEl) slotWinEl.innerText = 0;
+
       document
         .querySelectorAll(".symbol-container.win-highlight")
         .forEach((el) => el.classList.remove("win-highlight"));
@@ -1989,11 +2189,10 @@ function setupSlot(gameId) {
         randomMultiplier =
           multipliers[Math.floor(Math.random() * multipliers.length)];
         showToast(`Multiplicador x${randomMultiplier} ativado!`, 2000);
-        // Poderia adicionar uma animação aqui
       }
 
       for (let i = 0; i < 9; i++) {
-        symbolElements[i].innerText = finalGrid[i].icon;
+        if (symbolElements[i]) symbolElements[i].innerText = finalGrid[i].icon;
       }
 
       let totalWin = 0;
@@ -2019,9 +2218,8 @@ function setupSlot(gameId) {
         }
       });
 
-      // Contar símbolos de bônus (Dragão)
+      // Contar símbolos de bônus
       if (isFortuneDragon || isFortuneOx || isFortuneRabbit) {
-        // CORREÇÃO: Removida a condição duplicada.
         bonusSymbolsCount = finalGrid.filter((s) => s.isBonus).length;
       }
 
@@ -2032,8 +2230,8 @@ function setupSlot(gameId) {
 
         totalWin = Math.floor(totalWin);
         adjustBalance(totalWin);
-        el("slotBalance").innerText = formatCurrency(u.saldo);
-        el("slotWin").innerText = totalWin;
+        if (slotBalanceEl) slotBalanceEl.innerText = formatCurrency(u.saldo);
+        if (slotWinEl) slotWinEl.innerText = totalWin;
         reels.forEach((r) => r.classList.add("game-over"));
 
         pushHistory(
@@ -2063,28 +2261,34 @@ function setupSlot(gameId) {
         showToast("Você perdeu.");
       }
 
-      // Lógica de Bônus (Free Spins) para Fortune Dragon
+      // Lógica de Bônus (Free Spins)
       if (
-        (isFortuneDragon || isFortuneOx || isFortuneRabbit) && // CORREÇÃO: Removida a condição duplicada.
+        (isFortuneDragon || isFortuneOx || isFortuneRabbit) &&
         bonusSymbolsCount >= 3 &&
         !isBonusMode
       ) {
         isBonusMode = true;
         freeSpinsRemaining = 8;
         showToast("RODADAS GRÁTIS ATIVADAS!", 3000);
-        el("bonusSpinsContainer").style.display = "block";
-        el("bonusSpinsCount").innerText = freeSpinsRemaining;
-        gameCanvas.classList.add("bonus-mode");
+        const bonusSpinsContainerEl = el("bonusSpinsContainer");
+        if (bonusSpinsContainerEl)
+          bonusSpinsContainerEl.style.display = "block";
+        const bonusSpinsCountEl = el("bonusSpinsCount");
+        if (bonusSpinsCountEl) bonusSpinsCountEl.innerText = freeSpinsRemaining;
+        if (gameCanvas) gameCanvas.classList.add("bonus-mode");
       }
 
       if (isBonusMode) {
         freeSpinsRemaining--;
-        el("bonusSpinsCount").innerText = freeSpinsRemaining;
+        const bonusSpinsCountEl = el("bonusSpinsCount");
+        if (bonusSpinsCountEl) bonusSpinsCountEl.innerText = freeSpinsRemaining;
         if (freeSpinsRemaining <= 0) {
           isBonusMode = false;
           showToast("Rodadas Grátis terminaram.", 2500);
-          el("bonusSpinsContainer").style.display = "none";
-          gameCanvas.classList.remove("bonus-mode");
+          const bonusSpinsContainerEl = el("bonusSpinsContainer");
+          if (bonusSpinsContainerEl)
+            bonusSpinsContainerEl.style.display = "none";
+          if (gameCanvas) gameCanvas.classList.remove("bonus-mode");
         }
       }
 
@@ -2096,7 +2300,6 @@ function setupSlot(gameId) {
         if (freeSpinsRemaining > 0 || isAuto) doSpin();
       }
     } finally {
-      // Garante que os botões sejam reativados se o modo auto for desativado no meio de um giro
       if (!isAuto) {
         isSpinning = false;
         setControlsDisabled(false);
@@ -2105,170 +2308,213 @@ function setupSlot(gameId) {
   }
 
   // 7. Adiciona os event listeners
-  el("betUp").onclick = () => updateBet(1); // Aumenta o nível de aposta
-  el("betDown").onclick = () => updateBet(-1); // Diminui o nível de aposta
-  el("slotSpin").onclick = doSpin;
-  el("slotTurbo").onclick = () => {
-    if (isSpinning) return;
-    isTurbo = !isTurbo;
-    el("slotTurbo").classList.toggle("active", isTurbo);
-    showToast(`Modo Turbo ${isTurbo ? "Ativado" : "Desativado"}`);
-  };
-  el("slotAuto").onclick = () => {
-    // Permite desativar a qualquer momento, mas só permite ativar se não estiver girando
-    if (isSpinning && !isAuto) return;
-    isAuto = !isAuto;
-    const autoBtn = el("slotAuto");
-    autoBtn.classList.toggle("active", isAuto);
+  const betUpEl = el("betUp");
+  if (betUpEl) betUpEl.onclick = () => updateBet(1);
 
-    if (isAuto) {
-      showToast("Auto-Spin Ativado");
-      autoBtn.innerText = "PARAR";
-      doSpin();
-    } else {
-      showToast("Auto-Spin Desativado");
-      autoBtn.innerText = "AUTO";
-    }
-  };
+  const betDownEl = el("betDown");
+  if (betDownEl) betDownEl.onclick = () => updateBet(-1);
+
+  const slotSpinEl = el("slotSpin");
+  if (slotSpinEl) slotSpinEl.onclick = doSpin;
+
+  const slotTurboEl = el("slotTurbo");
+  if (slotTurboEl) {
+    slotTurboEl.onclick = () => {
+      if (isSpinning) return;
+      isTurbo = !isTurbo;
+      slotTurboEl.classList.toggle("active", isTurbo);
+      showToast(`Modo Turbo ${isTurbo ? "Ativado" : "Desativado"}`);
+    };
+  }
+  const slotAutoEl = el("slotAuto");
+  if (slotAutoEl) {
+    slotAutoEl.onclick = () => {
+      if (isSpinning && !isAuto) return;
+      isAuto = !isAuto;
+      slotAutoEl.classList.toggle("active", isAuto);
+
+      if (isAuto) {
+        showToast("Auto-Spin Ativado");
+        slotAutoEl.innerText = "PARAR";
+        doSpin();
+      } else {
+        showToast("Auto-Spin Desativado");
+        slotAutoEl.innerText = "AUTO";
+      }
+    };
+  }
 
   // 8. Renderização inicial
   for (let i = 0; i < 9; i++) {
-    symbolElements[i].innerText =
-      SYMBOL_LIST[Math.floor(Math.random() * SYMBOL_LIST.length)].icon;
+    if (symbolElements[i])
+      symbolElements[i].innerText =
+        SYMBOL_LIST[Math.floor(Math.random() * SYMBOL_LIST.length)].icon;
   }
-  el("slotBet").innerText = formatBetDisplay(bet); // Garante que a aposta inicial seja exibida corretamente
+  const slotBetEl = el("slotBet");
+  if (slotBetEl) slotBetEl.innerText = formatBetDisplay(bet);
 }
 
 /* ------------------------------
  BONUSES / MISSIONS
  ------------------------------ */
-el("claimDaily").onclick = () => {
-  if (!ensureAuthOrWarn()) return;
-  const u = getUser();
-  const lastDailyKey = "mc_daily_" + state.currentUser;
-  const last = storage.get(lastDailyKey, 0);
-  const now = Date.now();
-  if (now - last < 24 * 3600 * 1000) {
-    showToast("Bônus diário já resgatado hoje.");
-    return;
-  }
-  adjustBalance(CONFIG.rewards.dailyBonus);
-  storage.set(lastDailyKey, now);
-  pushNotification(
-    state.currentUser,
-    "bonus",
-    "Bônus Diário",
-    `Você resgatou R$ ${formatCurrency(CONFIG.rewards.dailyBonus)}!`
-  );
-  renderBalance();
-  showToast("+100 créditos (bônus diário)");
-};
-
-el("claimFirstBet").onclick = () => {
-  if (!ensureAuthOrWarn()) return;
-  const u = getUser();
-  if (storage.get("mc_firstbet_" + state.currentUser, false)) {
-    showToast("Bônus de primeira aposta já resgatado.");
-    return;
-  }
-  adjustBalance(CONFIG.rewards.firstBetBonus);
-  storage.set("mc_firstbet_" + state.currentUser, true);
-  pushNotification(
-    state.currentUser,
-    "bonus",
-    "Bônus de Primeira Aposta",
-    `Você resgatou R$ ${formatCurrency(CONFIG.rewards.firstBetBonus)}!`
-  );
-  renderBalance();
-  showToast("+50 créditos (primeira aposta)");
-};
-
-el("claimMission").onclick = () => {
-  if (!ensureAuthOrWarn()) return;
-  const m = state.missions;
-  if (m.completed) {
-    showToast("Missão já concluída.");
-    return;
-  }
-  const required = CONFIG.rewards.plinkoMission.playsRequired;
-  if (m.plinkoPlays >= required) {
-    adjustBalance(CONFIG.rewards.plinkoMission.reward);
-    m.completed = true;
+const claimDailyEl = el("claimDaily");
+if (claimDailyEl) {
+  claimDailyEl.onclick = () => {
+    if (!ensureAuthOrWarn()) return;
+    const lastDailyKey = "mc_daily_" + state.currentUser;
+    const last = storage.get(lastDailyKey, 0);
+    const now = Date.now();
+    if (now - last < 24 * 3600 * 1000) {
+      showToast("Bônus diário já resgatado hoje.");
+      return;
+    }
+    adjustBalance(CONFIG.rewards.dailyBonus);
+    storage.set(lastDailyKey, now);
     pushNotification(
       state.currentUser,
       "bonus",
-      "Missão Concluída!",
-      `Você ganhou R$ ${formatCurrency(
-        CONFIG.rewards.plinkoMission.reward
-      )} por completar a missão do Plinko.`
+      "Bônus Diário",
+      `Você resgatou R$ ${formatCurrency(CONFIG.rewards.dailyBonus)}!`
     );
     renderBalance();
-    showToast(
-      `+${CONFIG.rewards.plinkoMission.reward} créditos (missão concluída!)`
+    showToast("+100 créditos (bônus diário)");
+  };
+}
+
+const claimFirstBetEl = el("claimFirstBet");
+if (claimFirstBetEl) {
+  claimFirstBetEl.onclick = () => {
+    if (!ensureAuthOrWarn()) return;
+    if (storage.get("mc_firstbet_" + state.currentUser, false)) {
+      showToast("Bônus de primeira aposta já resgatado.");
+      return;
+    }
+    adjustBalance(CONFIG.rewards.firstBetBonus);
+    storage.set("mc_firstbet_" + state.currentUser, true);
+    pushNotification(
+      state.currentUser,
+      "bonus",
+      "Bônus de Primeira Aposta",
+      `Você resgatou R$ ${formatCurrency(CONFIG.rewards.firstBetBonus)}!`
     );
-  } else
-    showToast(
-      `Missão não concluída. Jogue Plinko ${required - m.plinkoPlays}x`
-    );
-};
+    renderBalance();
+    showToast("+50 créditos (primeira aposta)");
+  };
+}
+
+const claimMissionEl = el("claimMission");
+if (claimMissionEl) {
+  claimMissionEl.onclick = () => {
+    if (!ensureAuthOrWarn()) return;
+    const m = state.missions;
+    if (m.completed) {
+      showToast("Missão já concluída.");
+      return;
+    }
+    const required = CONFIG.rewards.plinkoMission.playsRequired;
+    if (m.plinkoPlays >= required) {
+      adjustBalance(CONFIG.rewards.plinkoMission.reward);
+      m.completed = true;
+      pushNotification(
+        state.currentUser,
+        "bonus",
+        "Missão Concluída!",
+        `Você ganhou R$ ${formatCurrency(
+          CONFIG.rewards.plinkoMission.reward
+        )} por completar a missão do Plinko.`
+      );
+      renderBalance();
+      showToast(
+        `+${CONFIG.rewards.plinkoMission.reward} créditos (missão concluída!)`
+      );
+    } else
+      showToast(
+        `Missão não concluída. Jogue Plinko ${required - m.plinkoPlays}x`
+      );
+  };
+}
 
 /* ------------------------------
  SETTINGS
  ------------------------------ */
-el("soundToggle").onclick = () => {
-  state.settings.sound = !state.settings.sound;
-  saveState();
-  showToast("Sons: " + (state.settings.sound ? "Ativados" : "Desativados"));
-};
-el("themeDark").onclick = () => {
-  document.body.setAttribute("data-theme", "dark");
-  state.settings.theme = "dark";
-  saveState();
-  showToast("Tema escuro ativado");
-};
-el("themeLight").onclick = () => {
-  document.body.setAttribute("data-theme", "light");
-  state.settings.theme = "light";
-  saveState();
-  showToast("Tema claro (parcial) ativado");
-};
-el("resetBalance").onclick = () => {
-  if (!ensureAuthOrWarn()) return;
-  const user = getUser();
-  definirSaldo(user.id, CONFIG.users.defaultCredits);
-  renderBalance();
-  showToast("Saldo resetado");
-};
-el("deleteAccount").onclick = () => {
-  if (
-    confirm(
-      "Apagar conta local? Isso removerá todos os dados desta conta neste navegador."
+const soundToggleEl = el("soundToggle");
+if (soundToggleEl) {
+  soundToggleEl.onclick = () => {
+    state.settings.sound = !state.settings.sound;
+    saveState();
+    showToast("Sons: " + (state.settings.sound ? "Ativados" : "Desativados"));
+  };
+}
+const themeDarkEl = el("themeDark");
+if (themeDarkEl) {
+  themeDarkEl.onclick = () => {
+    document.body.setAttribute("data-theme", "dark");
+    state.settings.theme = "dark";
+    saveState();
+    showToast("Tema escuro ativado");
+  };
+}
+const themeLightEl = el("themeLight");
+if (themeLightEl) {
+  themeLightEl.onclick = () => {
+    document.body.setAttribute("data-theme", "light");
+    state.settings.theme = "light";
+    saveState();
+    showToast("Tema claro (parcial) ativado");
+  };
+}
+const resetBalanceEl = el("resetBalance");
+if (resetBalanceEl) {
+  resetBalanceEl.onclick = () => {
+    if (!ensureAuthOrWarn()) return;
+    const user = getUser();
+    if (user) {
+      definirSaldo(user.id, CONFIG.users.defaultCredits);
+      renderBalance();
+      showToast("Saldo resetado");
+    }
+  };
+}
+const deleteAccountEl = el("deleteAccount");
+if (deleteAccountEl) {
+  deleteAccountEl.onclick = () => {
+    if (
+      confirm(
+        "Apagar conta? Isso removerá seus dados do servidor e deste navegador."
+      )
     )
-  )
-    deleteAccount();
-};
+      deleteAccount();
+  };
+}
 
-el("adminPanelBtn").onclick = () => {
-  // Chama a função do painel de admin definida no config.js
-  // Passa o 'state' e as funções 'helpers' necessárias como argumentos
-  CONFIG.admin.showPanel(state, {
-    showToast,
-    formatCurrency,
-    saveState,
-    renderBalance,
-    definirSaldo, // Passando a função do Supabase
-    banirUsuario, // Passando a função do Supabase
-    enviarMensagem, // Passando a função do Supabase
-  });
-};
+const adminPanelBtnEl = el("adminPanelBtn");
+if (adminPanelBtnEl) {
+  adminPanelBtnEl.onclick = () => {
+    // Chama a função do painel de admin definida no config.js
+    // Passa o 'state' e as funções 'helpers' necessárias como argumentos
+    CONFIG.admin.showPanel(state, {
+      showToast,
+      formatCurrency,
+      saveState,
+      renderBalance,
+      definirSaldo, // Passando a função do Supabase
+      banirUsuario, // Passando a função do Supabase
+      enviarMensagem, // Passando a função do Supabase
+    });
+  };
+}
 
 /* ------------------------------
  SEARCH / FILTER
  ------------------------------ */
-el("searchInput").addEventListener("input", (e) => {
-  renderGames(e.target.value);
-  el("filterLabel").innerText = e.target.value || "Todos";
-});
+const searchInputEl = el("searchInput");
+if (searchInputEl) {
+  searchInputEl.addEventListener("input", (e) => {
+    renderGames(e.target.value);
+    const filterLabelEl = el("filterLabel");
+    if (filterLabelEl) filterLabelEl.innerText = e.target.value || "Todos";
+  });
+}
 
 // Função placeholder para evitar erros de referência
 function checkAndShowAdminMessage() {
@@ -2279,69 +2525,90 @@ function checkAndShowAdminMessage() {
  INIT
  ------------------------------ */
 // Depositar créditos
-el("depositBtn").onclick = () => {
-  if (!ensureAuthOrWarn()) return;
-  const val = Number(el("depositValue").value) || 0;
-  if (val < 1) return showToast("Valor mínimo: 1");
-  adjustBalance(val);
-  renderBalance();
-  showToast("Depositado +" + val + " créditos");
-};
+const depositBtnEl = el("depositBtn");
+if (depositBtnEl) {
+  depositBtnEl.onclick = () => {
+    if (!ensureAuthOrWarn()) return;
+    const depositValueEl = el("depositValue");
+    const val = Number(depositValueEl?.value) || 0;
+    if (val < 1) return showToast("Valor mínimo: 1");
+    adjustBalance(val);
+    renderBalance();
+    showToast("Depositado +" + val + " créditos");
+  };
+}
 // Sacar créditos
-el("withdrawBtn").onclick = () => {
-  if (!ensureAuthOrWarn()) return;
-  const val = Number(el("withdrawValue").value) || 0;
-  if (val < 1) return showToast("Valor mínimo: 1");
-  if (val > getUser().saldo) return showToast("Saldo insuficiente");
-  adjustBalance(-val);
-  renderBalance();
-  showToast("Sacado -" + val + " créditos");
-};
+const withdrawBtnEl = el("withdrawBtn");
+if (withdrawBtnEl) {
+  withdrawBtnEl.onclick = () => {
+    if (!ensureAuthOrWarn()) return;
+    const withdrawValueEl = el("withdrawValue");
+    const val = Number(withdrawValueEl?.value) || 0;
+    if (val < 1) return showToast("Valor mínimo: 1");
+    const user = getUser();
+    if (!user || val > user.saldo) return showToast("Saldo insuficiente");
+    adjustBalance(-val);
+    renderBalance();
+    showToast("Sacado -" + val + " créditos");
+  };
+}
 async function init() {
-
   // Aplica configurações do site
   document.title = CONFIG.site.title;
-  el("brand").querySelector("h1").innerText = CONFIG.site.title;
-  el("brand").querySelector(".logo").innerText = CONFIG.site.logo;
-  el("gameArea").style.display = "none"; // Esconde a área de jogo inicialmente
+  const brandEl = el("brand");
+  if (brandEl) {
+    const h1 = brandEl.querySelector("h1");
+    if (h1) h1.innerText = CONFIG.site.title;
+    const logo = brandEl.querySelector(".logo");
+    if (logo) logo.innerText = CONFIG.site.logo;
+  }
+  const gameAreaEl = el("gameArea");
+  if (gameAreaEl) gameAreaEl.style.display = "none"; // Esconde a área de jogo inicialmente
 
   // show default dashboard
-  if (el("nav-dashboard")) {
+  const navDashboardEl = el("nav-dashboard");
+  if (navDashboardEl) {
     show("dashboard");
     renderGames(""); // Garante que os jogos sejam exibidos na inicialização
   }
-  // nav - show/hide
   // mount quick events
-  el("btnAction").onclick = () =>
-    showToast("Selecione um jogo e pressione Jogar");
+  const btnActionEl = el("btnAction");
+  if (btnActionEl) {
+    btnActionEl.onclick = () =>
+      showToast("Selecione um jogo e pressione Jogar");
+  }
 
   // Lógica para mudar a foto de perfil (movido para init)
-  el("profilePicInput").addEventListener("change", (event) => {
-    if (!ensureAuthOrWarn()) return;
+  const profilePicInputEl = el("profilePicInput");
+  if (profilePicInputEl) {
+    profilePicInputEl.addEventListener("change", (event) => {
+      if (!ensureAuthOrWarn()) return;
 
-    const file = event.target.files[0];
-    if (!file) return;
+      const file = event.target.files[0];
+      if (!file) return;
 
-    // Valida o tipo de arquivo
-    if (!["image/jpeg", "image/png"].includes(file.type)) {
-      showToast("Por favor, selecione uma imagem JPG ou PNG.");
-      return;
-    }
+      // Valida o tipo de arquivo
+      if (!["image/jpeg", "image/png"].includes(file.type)) {
+        showToast("Por favor, selecione uma imagem JPG ou PNG.");
+        return;
+      }
 
-    const reader = new FileReader();
+      const reader = new FileReader();
 
-    reader.onload = (e) => {
-      const newProfilePicUrl = e.target.result; // URL em Base64
+      reader.onload = (e) => {
+        const newProfilePicUrl = e.target.result; // URL em Base64
 
-      // Atualiza o estado e a interface
-      const u = getUser();
-      u.profilePic = newProfilePicUrl;
-      saveState();
-      renderAuth(); // Re-renderiza para mostrar a nova foto
-      showToast("Foto de perfil atualizada!");
-    };
+        // Atualiza o estado e a interface
+        const u = getUser();
+        if (u) {
+          u.profilePic = newProfilePicUrl;
+          saveState();
+          renderAuth(); // Re-renderiza para mostrar a nova foto
+          showToast("Foto de perfil atualizada!");
+        }
+      };
 
-    reader.readAsDataURL(file);
+      reader.readAsDataURL(file);
     });
   }
 
@@ -2352,7 +2619,7 @@ async function init() {
     if (userFromStorage && userFromStorage.id) {
       // Valida a sessão com o Supabase em segundo plano
       const { data: dbUser, error } = await supabase
-        .from("users") // CORREÇÃO: Nome da tabela estava incorreto
+        .from("users")
         .select("saldo, banido")
         .eq("id", userFromStorage.id)
         .single();
@@ -2376,7 +2643,7 @@ async function init() {
   renderBalance();
   setupNav();
   renderRanking();
-  checkAndShowAdminMessage(); // CORREÇÃO: Checa por mensagem no carregamento inicial
+  checkAndShowAdminMessage();
 }
 
 /* ------------------------------
