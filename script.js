@@ -600,21 +600,6 @@ function renderRanking() {
  NAV EVENTS
  ------------------------------ */
 function setupNav() {
-  const show = (id) => {
-    [
-      "dashboard",
-      "history",
-      "ranking",
-      "bonuses",
-      "settings",
-      "support",
-    ].forEach((s) => {
-      const sectionEl = el("section-" + s);
-      if (sectionEl) sectionEl.style.display = s === id ? "block" : "none";
-      const navButton = el("nav-" + s);
-      if (navButton) navButton.classList.toggle("active", s === id);
-    });
-  };
   const navDashboard = el("nav-dashboard");
   if (navDashboard) navDashboard.onclick = () => show("dashboard");
 
@@ -643,6 +628,18 @@ function setupNav() {
 
   const navLogout = el("nav-logout");
   if (navLogout) navLogout.onclick = () => logout();
+}
+
+// Função para alternar a visibilidade das seções
+function show(id) {
+  ["dashboard", "history", "ranking", "bonuses", "settings", "support"].forEach(
+    (s) => {
+      const sectionEl = el("section-" + s);
+      if (sectionEl) sectionEl.style.display = s === id ? "block" : "none";
+      const navButton = el("nav-" + s);
+      if (navButton) navButton.classList.toggle("active", s === id);
+    }
+  );
 }
 
 /* ------------------------------
