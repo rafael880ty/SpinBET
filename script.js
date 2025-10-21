@@ -374,11 +374,7 @@ function renderAuth() {
         ✉️
         <span id="inboxBadge" class="badge" style="display: none;"></span>
       </button>
-      <div style="text-align:right"><strong>${
-        state.currentUser
-      }</strong><div class="small-muted">${
-      user.email || "Sem email"
-    }</div></div>
+      <div style="text-align:right"><strong>${state.currentUser}</strong><div class="small-muted">${user.email || "Sem email"}</div></div>
       <img src="${profilePicUrl}" alt="Foto de Perfil" />
     `;
     box.appendChild(form);
@@ -401,6 +397,12 @@ function renderAuth() {
   el("usernameDisplay").innerText = state.currentUser || "—";
 }
 function renderInboxBadge() {
+  // Proteção contra elemento ausente
+  if (!state.currentUser) {
+    const badge = el("inboxBadge");
+    if (badge) badge.style.display = "none";
+    return;
+  }
   if (!state.currentUser) return;
   const badge = el("inboxBadge");
   if (!badge) return;
@@ -462,7 +464,8 @@ function showInbox() {
 
 function renderBalance() {
   const user = getUser();
-  const v = user ? user.saldo : 0;
+  // Garante que 'v' seja sempre um número
+  const v = user?.saldo ?? 0;
   if (el("balanceValue")) {
     el("balanceValue").innerText = formatCurrency(v);
   }
@@ -470,6 +473,7 @@ function renderBalance() {
 
 function renderGames(filter = "") {
   const grid = el("gamesGrid");
+  if (!grid) return; // Proteção contra elemento ausente
   grid.innerHTML = "";
   const q = filter.toLowerCase();
   GAMES.forEach((g) => {
@@ -489,6 +493,7 @@ function renderGames(filter = "") {
 
 function renderMiniHistory() {
   const box = el("miniHistory");
+  if (!box) return; // Proteção contra elemento ausente
   box.innerHTML = "";
   if (!state.currentUser) {
     box.innerHTML = '<div class="small-muted">Entre para ver histórico</div>';
@@ -512,6 +517,7 @@ function renderMiniHistory() {
 
 function renderHistory() {
   const box = el("historyList");
+  if (!box) return; // Proteção contra elemento ausente
   box.innerHTML = "";
   if (!state.currentUser) {
     box.innerHTML = '<div class="small-muted">Entre para ver histórico</div>';
@@ -538,6 +544,7 @@ function renderHistory() {
 
 function renderRanking() {
   const box = el("rankingList");
+  if (!box) return; // Proteção contra elemento ausente
   box.innerHTML = "";
   // gera o ranking por saldo
   const arr = Object.keys(state.users).map((u) => ({
@@ -569,7 +576,8 @@ function setupNav() {
       "support",
     ].forEach((s) => {
       el("section-" + s).style.display = s === id ? "block" : "none";
-      el("nav-" + s).classList.toggle("active", s === id);
+      const navButton = el("nav-" + s);
+      if (navButton) navButton.classList.toggle("active", s === id);
     });
   };
   el("nav-dashboard").onclick = () => show("dashboard");
@@ -601,6 +609,7 @@ function ensureAuthOrWarn() {
 function openGame(gameId) {
   const g = GAMES.find((x) => x.id === gameId);
   if (!g) return;
+  if (!el("gameArea")) return; // Proteção
   el("gameArea").style.display = "flex";
   el("gameTitle").innerText = g.name;
   el("gameSubtitle").innerText = g.cat;
@@ -1406,6 +1415,7 @@ function setupPlinko() {
             pushHistory("Plinko", -lossAmount, "LOSS", `x${multiplier.value}`);
             showToast(`Perdeu ${lossAmount} créditos (x${multiplier.value})`);
           }
+
         }
         balls.splice(ballIndex, 1); // Remove a bola
       }
@@ -2260,6 +2270,11 @@ el("searchInput").addEventListener("input", (e) => {
   el("filterLabel").innerText = e.target.value || "Todos";
 });
 
+// Função placeholder para evitar erros de referência
+function checkAndShowAdminMessage() {
+  // console.log("Verificando mensagens do admin...");
+}
+
 /* ------------------------------
  INIT
  ------------------------------ */
@@ -2283,6 +2298,7 @@ el("withdrawBtn").onclick = () => {
   showToast("Sacado -" + val + " créditos");
 };
 async function init() {
+
   // Aplica configurações do site
   document.title = CONFIG.site.title;
   el("brand").querySelector("h1").innerText = CONFIG.site.title;
@@ -2326,7 +2342,8 @@ async function init() {
     };
 
     reader.readAsDataURL(file);
-  });
+    });
+  }
 
   // Se houver um usuário salvo no localStorage, tenta validar a sessão
   if (state.currentUser) {
