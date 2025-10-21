@@ -374,7 +374,11 @@ function renderAuth() {
         ✉️
         <span id="inboxBadge" class="badge" style="display: none;"></span>
       </button>
-      <div style="text-align:right"><strong>${state.currentUser}</strong><div class="small-muted">${user.email || "Sem email"}</div></div>
+      <div style="text-align:right"><strong>${
+        state.currentUser
+      }</strong><div class="small-muted">${
+      user.email || "Sem email"
+    }</div></div>
       <img src="${profilePicUrl}" alt="Foto de Perfil" />
     `;
     box.appendChild(form);
@@ -690,6 +694,28 @@ function pushHistory(game, bet, result, info) {
   renderMiniHistory();
   renderHistory();
   renderRanking();
+}
+
+function pushNotification(username, type, title, message) {
+  if (!state.users[username]) return;
+
+  const user = state.users[username];
+  if (!user.inbox) {
+    user.inbox = [];
+  }
+
+  user.inbox.unshift({
+    id: Date.now(), // ID simples baseado no timestamp
+    type,
+    title,
+    message,
+    timestamp: new Date().toISOString(),
+    read: false,
+  });
+
+  if (user.inbox.length > 100) user.inbox.pop(); // Limita o tamanho da caixa de entrada
+  saveState();
+  renderInboxBadge(); // Atualiza o contador de mensagens não lidas
 }
 
 /* ------------------------------
@@ -1402,7 +1428,6 @@ function setupPlinko() {
             pushHistory("Plinko", -lossAmount, "LOSS", `x${multiplier.value}`);
             showToast(`Perdeu ${lossAmount} créditos (x${multiplier.value})`);
           }
-
         }
         balls.splice(ballIndex, 1); // Remove a bola
       }
@@ -2141,6 +2166,7 @@ el("claimDaily").onclick = () => {
   }
   adjustBalance(CONFIG.rewards.dailyBonus);
   storage.set(lastDailyKey, now);
+  pushNotification(
     state.currentUser,
     "bonus",
     "Bônus Diário",
@@ -2159,6 +2185,7 @@ el("claimFirstBet").onclick = () => {
   }
   adjustBalance(CONFIG.rewards.firstBetBonus);
   storage.set("mc_firstbet_" + state.currentUser, true);
+  pushNotification(
     state.currentUser,
     "bonus",
     "Bônus de Primeira Aposta",
@@ -2179,6 +2206,7 @@ el("claimMission").onclick = () => {
   if (m.plinkoPlays >= required) {
     adjustBalance(CONFIG.rewards.plinkoMission.reward);
     m.completed = true;
+    pushNotification(
       state.currentUser,
       "bonus",
       "Missão Concluída!",
@@ -2277,7 +2305,6 @@ el("withdrawBtn").onclick = () => {
   showToast("Sacado -" + val + " créditos");
 };
 async function init() {
-
   // Aplica configurações do site
   document.title = CONFIG.site.title;
   el("brand").querySelector("h1").innerText = CONFIG.site.title;
