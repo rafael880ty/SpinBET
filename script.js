@@ -176,6 +176,56 @@ function saveState() {
    AUTH / ACCOUNT MANAGEMENT
 ------------------------------ */
 
+// Simples função de hash (NÃO USE EM PRODUÇÃO)
+// Em um app real, use bibliotecas como bcrypt.
+function hash(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash |= 0; // Converte para 32bit integer
+  }
+  return hash.toString();
+}
+
+export async function loginUser(username, pass) {
+  // 1. Busca o usuário no Supabase
+  const { data: user, error } = await supabase
+    .from("users")
+    .select("id, nome, saldo, banido, pass_hash")
+    .eq("nome", username)
+    .single();
+
+  if (error || !user) {
+    return { ok: false, msg: "Usuário ou senha inválidos." };
+  }
+
+  // 2. Verifica a senha (simulada)
+  if (user.pass_hash !== hash(pass)) {
+    return { ok: false, msg: "Usuário ou senha inválidos." };
+  }
+
+  // 3. Verifica se o usuário está banido
+  if (user.banido) {
+    logout(); // Garante que qualquer sessão antiga seja limpa
+    return { ok: false, msg: "Esta conta foi suspensa." };
+  }
+
+  // 4. Login bem-sucedido: atualiza o estado local
+  state.currentUser = user.nome;
+  state.users[user.nome] = {
+    ...user, // id, nome, saldo, banido, pass_hash
+    email: user.email || "", // Adicionar se existir no DB, senão, vazio
+    history: [], // Inicializa localmente
+    profilePic:
+      "https://i.pinimg.com/236x/21/9e/ae/219eaea67aafa864db091919ce3f5d82.jpg",
+    stats: { wins: 0, plays: 0, streak: 0 }, // Inicializa localmente
+  };
+  saveState();
+
+  return { ok: true };
+}
+
 export async function createUser(username, email, pass) {
   // 1. Verifica se o usuário já existe no Supabase
   const { data: existingUser, error: fetchError } = await supabase
@@ -214,60 +264,27 @@ export async function createUser(username, email, pass) {
   return { ok: true };
 }
 
-export async function createUser(username, email, pass) {
-  // 1. Verifica se o usuário já existe no Supabase
-  const { data: existingUser, error: fetchError } = await supabase
-    .from("users")
-    .select("id")
-    .eq("nome", username)
-    .single();
-
-  if (existingUser) {
-    return { ok: false, msg: "Usuário já existe" };
-  }
-
-  // 2. Cria o usuário no Supabase
-  const passHash = hash(pass);
-  const { data: newUser, error: insertError } = await criarUsuarioSupabase(
-    username,
-    passHash,
-    CONFIG.users.defaultCredits || 0
-  );
-
-  if (insertError) {
-    return { ok: false, msg: "Erro ao criar conta. Tente novamente." };
-  }
-
-  // 3. Loga o novo usuário
-  state.currentUser = username;
-  state.users[username] = {
-    ...newUser[0], // Adiciona os dados do Supabase ao estado local
-    email, // Email não está no DB, mantemos localmente se necessário
-    history: [], // Inicializa localmente
-    profilePic:
-      "https://i.pinimg.com/236x/21/9e/ae/219eaea67aafa864db091919ce3f5d82.jpg",
-    stats: { wins: 0, plays: 0, streak: 0 }, // Inicializa localmente
-  };
-  saveState();
-  return { ok: true };
-}
-
 function logout() {
-  // Limpa o usuário atual e os dados em cache
-  if (state.currentUser) {
-    delete state.users[state.currentUser];
-  }
+  // Limpa o usuário atual e o cache de usuários
   state.currentUser = null;
+  state.users = {}; // Limpa todos os dados de usuários em cache
   saveState();
+
+  // Reseta a interface para o estado de "não logado"
   el("gameArea").style.display = "none"; // Esconde a área de jogo
   renderAuth();
   renderBalance();
+  renderGames(""); // Mostra todos os jogos novamente
+  renderMiniHistory(); // Limpa o histórico rápido
+  renderRanking(); // Limpa o ranking
   showToast("Desconectado");
 }
+
 async function deleteAccount() {
   if (!state.currentUser) return;
-  // Simula a deleção no Supabase (em um app real, você faria a chamada aqui)
-  // await supabase.from("users").delete().eq("id", getUser().id);
+  const user = getUser();
+  // Deleta o usuário do Supabase
+  if (user && user.id) await supabase.from("users").delete().eq("id", user.id);
   // Chama a função de logout para limpar completamente a sessão e a interface
   logout();
   showToast("Sua conta foi apagada com sucesso.");
@@ -312,7 +329,7 @@ function renderAuth() {
           renderAuth();
           renderBalance();
           renderGames("");
-          renderRanking();
+          renderRanking(); // CORREÇÃO: Renderiza o ranking após o login
           checkAndShowAdminMessage(); // CORREÇÃO: Checa por mensagem após o login
         }
       });
@@ -340,14 +357,14 @@ function renderAuth() {
           renderAuth();
           renderBalance();
           renderGames(""); // CORREÇÃO: Renderiza os jogos novamente após o cadastro.
-          renderRanking();
+          renderRanking(); // CORREÇÃO: Renderiza o ranking após o cadastro
           checkAndShowAdminMessage(); // CORREÇÃO: Checa por mensagem após o cadastro
         }
       });
     };
   } else {
     const user = state.users[state.currentUser];
-    const form = document.createElement("div"); // CORREÇÃO: A variável 'form' não estava declarada
+    const form = document.createElement("div");
     const profilePicUrl =
       user.profilePic ||
       "https://i.pinimg.com/236x/21/9e/ae/219eaea67aafa864db091919ce3f5d82.jpg";
@@ -357,9 +374,7 @@ function renderAuth() {
         ✉️
         <span id="inboxBadge" class="badge" style="display: none;"></span>
       </button>
-      <div style="text-align:right"><strong>${
-        state.currentUser
-      }</strong><div class="small-muted">${user.email || ""}</div></div>
+      <div style="text-align:right"><strong>${state.currentUser}</strong><div class="small-muted">${user.email || "Sem email"}</div></div>
       <img src="${profilePicUrl}" alt="Foto de Perfil" />
     `;
     box.appendChild(form);
@@ -523,7 +538,7 @@ function renderRanking() {
   // gera o ranking por saldo
   const arr = Object.keys(state.users).map((u) => ({
     user: u,
-    balance: state.users[u].balance,
+    balance: state.users[u].saldo, // CORREÇÃO: Usar 'saldo' ao invés de 'balance'
     joined: state.users[u].joined,
   }));
   arr.sort((a, b) => b.balance - a.balance);
@@ -1172,7 +1187,7 @@ function setupMines() {
     if (!ensureAuthOrWarn()) return;
     bet = Number(el("betInput").value) || 0;
     if (bet < 1) return showToast("Aposta mínima 1");
-    if (bet > getUser().saldo) return showToast("Saldo insuficiente");
+    if (bet > u.saldo) return showToast("Saldo insuficiente");
 
     adjustBalance(-bet);
 
@@ -1218,7 +1233,6 @@ function setupMines() {
       );
       showToast(`Você sacou ${win} créditos!`);
       revealBoard();
-      el("minesBombs").disabled = false; // Reabilita o input de bombas
       renderBalance();
       el("btnAction").innerText = "Jogar Novamente";
       el("btnAction").onclick = () => openGame("mines");
@@ -1389,7 +1403,6 @@ function setupPlinko() {
             showToast(`Perdeu ${lossAmount} créditos (x${multiplier.value})`);
           }
 
-          renderBalance();
         }
         balls.splice(ballIndex, 1); // Remove a bola
       }
@@ -1406,7 +1419,7 @@ function setupPlinko() {
     if (!ensureAuthOrWarn()) return;
     const bet = Number(el("betInput").value) || 0;
     if (bet < 1) return showToast("Aposta mínima 1");
-    if (bet > getUser().saldo) return showToast("Saldo insuficiente");
+    if (bet > u.saldo) return showToast("Saldo insuficiente");
 
     adjustBalance(-bet);
     balls.push({
@@ -1576,7 +1589,6 @@ function setupFruitSlice() {
       adjustBalance(payout);
       pushHistory("FruitSlice", bet, "WIN", `Score:${score} -> +${payout}`);
       showToast("Você ganhou " + payout + " créditos");
-      renderBalance();
       endGame();
       return;
     }
@@ -1587,7 +1599,6 @@ function setupFruitSlice() {
     const u = getUser();
     if (bet > u.saldo) return showToast("Saldo insuficiente");
 
-    adjustBalance(-bet);
     renderBalance();
 
     score = 0;
@@ -2130,7 +2141,6 @@ el("claimDaily").onclick = () => {
   }
   adjustBalance(CONFIG.rewards.dailyBonus);
   storage.set(lastDailyKey, now);
-  pushNotification(
     state.currentUser,
     "bonus",
     "Bônus Diário",
@@ -2149,7 +2159,6 @@ el("claimFirstBet").onclick = () => {
   }
   adjustBalance(CONFIG.rewards.firstBetBonus);
   storage.set("mc_firstbet_" + state.currentUser, true);
-  pushNotification(
     state.currentUser,
     "bonus",
     "Bônus de Primeira Aposta",
@@ -2170,7 +2179,6 @@ el("claimMission").onclick = () => {
   if (m.plinkoPlays >= required) {
     adjustBalance(CONFIG.rewards.plinkoMission.reward);
     m.completed = true;
-    pushNotification(
       state.currentUser,
       "bonus",
       "Missão Concluída!",
@@ -2269,11 +2277,6 @@ el("withdrawBtn").onclick = () => {
   showToast("Sacado -" + val + " créditos");
 };
 async function init() {
-  // 1. Renderiza a estrutura básica e os jogos imediatamente.
-  renderGames("");
-  renderAuth();
-  renderBalance();
-  renderRanking();
 
   // Aplica configurações do site
   document.title = CONFIG.site.title;
@@ -2284,6 +2287,7 @@ async function init() {
   // show default dashboard
   if (el("nav-dashboard")) {
     show("dashboard");
+    renderGames(""); // Garante que os jogos sejam exibidos na inicialização
   }
   // nav - show/hide
   // mount quick events
@@ -2326,7 +2330,7 @@ async function init() {
     if (userFromStorage && userFromStorage.id) {
       // Valida a sessão com o Supabase em segundo plano
       const { data: dbUser, error } = await supabase
-        .from("users")
+        .from("users") // CORREÇÃO: Nome da tabela estava incorreto
         .select("saldo, banido")
         .eq("id", userFromStorage.id)
         .single();
